@@ -1,0 +1,1666 @@
+name: GTM_ANALYTICS
+description: "GTM semantic view for Bookings, Pipeline Overview and Opportunities Details: booking rows and KPIs (Salesforce ARR bookings plus Non-Recurring bookings from the GL), current-state opportunity lines, stage runs with the values of the last record of each run, and pipeline KPIs (prior-year windows). One view, several grains, joined only through shared dimensions. Deals only: leads are not in any table. There are no pipeline targets, so no target attainment or coverage ratio. KPI card metrics read the latest as-at date only."
+tables:
+  - name: BOOKINGS_OVERVIEW
+    synonyms:
+      - bookings KPI
+      - bookings overview
+      - bookings cards
+    description: "Bookings by completed month-end as-at date, booking metric, subsidiary, product, owner and account, with MTD / QTD / YTD / LTM and prior-year windows (rpt_gtm__bookings). Feeds the bookings cards and monthly trend. METRIC_NAME rows are not additive across each other."
+    base_table:
+      database: PROD_DB
+      schema: REPORTING
+      table: RPT_GTM_BOOKINGS
+    primary_key:
+      columns:
+        - AS_OF_DATE
+        - METRIC_NAME
+        - SUBSIDIARY_KEY
+        - PRODUCT_KEY
+        - OWNER_KEY
+        - ACCOUNT_KEY
+    dimensions:
+      - name: ACCOUNT_KEY
+        description: Key of the account (dim_account). The relationship key; blank on Non-Recurring rows.
+        expr: bookings_overview.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: AS_OF_DATE
+        description: Completed month-end. The current month appears once it has closed.
+        expr: bookings_overview.AS_OF_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: DATE_KEY
+        description: "Date key of the as-at date (dim__date.DATE_KEY, YYYYMMDD, for example 20260131). The relationship key to dim_date."
+        expr: bookings_overview.DATE_KEY
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: IS_LATEST
+        description: TRUE only on the last completed month-end (the KPI card date).
+        expr: bookings_overview.IS_LATEST
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: METRIC_NAME
+        description: "Total Bookings, Recurring Bookings, Non-Recurring Bookings, ARR (New) or ARR (Upsell)."
+        expr: bookings_overview.METRIC_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_KEY
+        description: Key of the opportunity owner (dim_user). The relationship key; blank on Non-Recurring rows.
+        expr: bookings_overview.OWNER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT
+        description: Booking product name (One Time Services on Non-Recurring rows).
+        expr: bookings_overview.PRODUCT
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Key of the product (dim_product). The relationship key.
+        expr: bookings_overview.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: SUBSIDIARY_NAME
+        description: Subsidiary name; blank on the Salesforce ARR rows (no Salesforce subsidiary).
+        expr: bookings_overview.SUBSIDIARY_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+    facts:
+      - name: LTM
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.LTM
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: MTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.MTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_LTM
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.PY_LTM
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_MTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.PY_MTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_QTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.PY_QTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_YTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.PY_YTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: QTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.QTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: YTD
+        description: "Window value of the row METRIC_NAME (booking ACV in USD). Total Bookings = Recurring + Non-Recurring, Recurring = ARR (New) + ARR (Upsell): never add across METRIC_NAME."
+        expr: bookings_overview.YTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+    metrics:
+      - name: ARR_NEW_LTM
+        description: "ARR (New) (booking ACV, USD), window LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_MTD
+        description: "ARR (New) (booking ACV, USD), window MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_PYLTM
+        description: "ARR (New) (booking ACV, USD), window PY_LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_PYMTD
+        description: "ARR (New) (booking ACV, USD), window PY_MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_PYQTD
+        description: "ARR (New) (booking ACV, USD), window PY_QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_PYYTD
+        description: "ARR (New) (booking ACV, USD), window PY_YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_QTD
+        description: "ARR (New) (booking ACV, USD), window QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_NEW_YTD
+        description: "ARR (New) (booking ACV, USD), window YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (New)' THEN bookings_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_LTM
+        description: "ARR (Upsell) (booking ACV, USD), window LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_MTD
+        description: "ARR (Upsell) (booking ACV, USD), window MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_PYLTM
+        description: "ARR (Upsell) (booking ACV, USD), window PY_LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_PYMTD
+        description: "ARR (Upsell) (booking ACV, USD), window PY_MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_PYQTD
+        description: "ARR (Upsell) (booking ACV, USD), window PY_QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_PYYTD
+        description: "ARR (Upsell) (booking ACV, USD), window PY_YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_QTD
+        description: "ARR (Upsell) (booking ACV, USD), window QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_YTD
+        description: "ARR (Upsell) (booking ACV, USD), window YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'ARR (Upsell)' THEN bookings_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_LTM
+        description: "Non-Recurring Bookings (booking ACV, USD), window LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_MTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_PYLTM
+        description: "Non-Recurring Bookings (booking ACV, USD), window PY_LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_PYMTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window PY_MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_PYQTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window PY_QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_PYYTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window PY_YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_QTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_YTD
+        description: "Non-Recurring Bookings (booking ACV, USD), window YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Non-Recurring Bookings' THEN bookings_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_LTM
+        description: "Recurring Bookings (booking ACV, USD), window LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_MTD
+        description: "Recurring Bookings (booking ACV, USD), window MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_PYLTM
+        description: "Recurring Bookings (booking ACV, USD), window PY_LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_PYMTD
+        description: "Recurring Bookings (booking ACV, USD), window PY_MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_PYQTD
+        description: "Recurring Bookings (booking ACV, USD), window PY_QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_PYYTD
+        description: "Recurring Bookings (booking ACV, USD), window PY_YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_QTD
+        description: "Recurring Bookings (booking ACV, USD), window QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: RECURRING_BOOKINGS_YTD
+        description: "Recurring Bookings (booking ACV, USD), window YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Recurring Bookings' THEN bookings_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_LTM
+        description: "Total Bookings (booking ACV, USD), window LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_MTD
+        description: "Total Bookings (booking ACV, USD), window MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_PYLTM
+        description: "Total Bookings (booking ACV, USD), window PY_LTM, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_PYMTD
+        description: "Total Bookings (booking ACV, USD), window PY_MTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_PYQTD
+        description: "Total Bookings (booking ACV, USD), window PY_QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_PYYTD
+        description: "Total Bookings (booking ACV, USD), window PY_YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_QTD
+        description: "Total Bookings (booking ACV, USD), window QTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_BOOKINGS_YTD
+        description: "Total Bookings (booking ACV, USD), window YTD, at each completed month-end. Group by AS_OF_DATE for the trend; the KPI cards read the most recent date. Responds to subsidiary, product, owner and account."
+        expr: SUM(CASE WHEN bookings_overview.METRIC_NAME = 'Total Bookings' THEN bookings_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+  - name: BOOKING_LINES
+    synonyms:
+      - bookings
+      - booking lines
+      - closed won lines
+    description: "Booking lines (fact__booking): one row per opportunity line item of a Salesforce closed-won opportunity (BOOKING_SOURCE = Salesforce), plus monthly Non-Recurring rows from the GL (BOOKING_SOURCE = NetSuite; one-time services, no opportunity, account or owner). Authoritative source for booking ACV by booking date. Do not mix with opportunity pipeline value."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: FACT_BOOKING
+    primary_key:
+      columns:
+        - BOOKING_KEY
+    dimensions:
+      - name: ACCOUNT_KEY
+        description: Key of the account (dim_account). The relationship key; blank on Non-Recurring rows.
+        expr: booking_lines.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: BOOKING_DATE
+        description: "Booking date: the opportunity close date (Salesforce) or the accounting period end date (Non-Recurring); the date a booking counts in."
+        expr: booking_lines.BOOKING_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: BOOKING_KEY
+        description: "Booking row key (hashed from the opportunity line item ID, or from the income statement row for Non-Recurring rows)."
+        expr: booking_lines.BOOKING_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: BOOKING_METRIC
+        description: "ARR (New), ARR (Upsell) or Non-Recurring."
+        expr: booking_lines.BOOKING_METRIC
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: BOOKING_SOURCE
+        description: "Where the booking row comes from: Salesforce for ARR bookings, NetSuite for Non-Recurring bookings."
+        expr: booking_lines.BOOKING_SOURCE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_ID
+        description: Salesforce opportunity ID; blank on Non-Recurring rows.
+        expr: booking_lines.OPPORTUNITY_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_LINE_ITEM_ID
+        description: Salesforce opportunity line item ID; blank on Non-Recurring rows.
+        expr: booking_lines.OPPORTUNITY_LINE_ITEM_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_TYPE
+        description: "Opportunity type: New Customer, Upgrade, Renewal or Downgrade (blank on Non-Recurring rows)."
+        expr: booking_lines.OPPORTUNITY_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_KEY
+        description: Key of the opportunity owner (dim_user). The relationship key; blank on Non-Recurring rows.
+        expr: booking_lines.OWNER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT
+        description: Booking product name (One Time Services on Non-Recurring rows).
+        expr: booking_lines.PRODUCT
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Key of the product (dim_product). The relationship key.
+        expr: booking_lines.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: SUBSIDIARY_KEY
+        description: Key of the subsidiary (dim_subsidiary). Only on Non-Recurring rows; blank on Salesforce rows.
+        expr: booking_lines.SUBSIDIARY_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+    facts:
+      - name: ACV_USD
+        description: "Booking amount in USD (Salesforce: year-1 product change to ARR of the line, signed; NetSuite Non-Recurring: monthly one-time services amount from the GL)."
+        expr: booking_lines.ACV_USD
+        data_type: FLOAT
+        access_modifier: public_access
+    metrics:
+      - name: ARR_NEW_ACV_USD
+        description: Booking ACV (USD) of Salesforce lines whose transaction category is New.
+        expr: SUM(CASE WHEN booking_lines.BOOKING_METRIC = 'ARR (New)' THEN booking_lines.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: ARR_UPSELL_ACV_USD
+        description: Booking ACV (USD) of all other Salesforce lines (any transaction category other than New).
+        expr: SUM(CASE WHEN booking_lines.BOOKING_METRIC = 'ARR (Upsell)' THEN booking_lines.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: BOOKING_ACV_USD
+        description: Booking ACV in USD of rows that count in a booking metric. Additive across rows; use BOOKING_DATE for the period.
+        expr: SUM(CASE WHEN booking_lines.BOOKING_METRIC IS NOT NULL THEN booking_lines.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: BOOKING_LINE_COUNT
+        description: Number of booking rows (opportunity line items of closed-won opportunities plus monthly Non-Recurring GL rows).
+        expr: COUNT(booking_lines.BOOKING_KEY)
+        access_modifier: public_access
+      - name: NON_RECURRING_BOOKINGS_ACV_USD
+        description: Booking amount (USD) of the Non-Recurring rows (one-time services from the GL).
+        expr: SUM(CASE WHEN booking_lines.BOOKING_METRIC = 'Non-Recurring' THEN booking_lines.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+  - name: DIM_ACCOUNT
+    synonyms:
+      - account
+      - customer account
+    description: "Salesforce account dimension, for bookings and opportunities."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_ACCOUNT
+    primary_key:
+      columns:
+        - ACCOUNT_KEY
+    dimensions:
+      - name: ACCOUNT_ID
+        description: Salesforce account ID.
+        expr: dim_account.ACCOUNT_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: ACCOUNT_KEY
+        description: Account surrogate key.
+        expr: dim_account.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: ACCOUNT_NAME
+        synonyms:
+          - account name
+          - customer
+        description: Salesforce account name.
+        expr: dim_account.ACCOUNT_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: INDUSTRY
+        description: Salesforce account industry.
+        expr: dim_account.INDUSTRY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: USER_KEY
+        description: "Key of the account owner (resolved from the account OWNER_ID, same key as dim_user.USER_KEY). An attribute only: no relationship, so the owner of an opportunity (OWNER_KEY) stays the single path to dim_user."
+        expr: dim_account.USER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+  - name: DIM_DATE
+    synonyms:
+      - calendar
+      - dim date
+      - date
+    description: "Calendar dimension (calendar year, quarter, month). No separate fiscal calendar is attached to the GTM data."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_DATE
+    primary_key:
+      columns:
+        - DATE_KEY
+    unique_keys:
+      - columns:
+          - DATE
+    dimensions:
+      - name: DATE
+        synonyms:
+          - day
+        description: Calendar date.
+        expr: dim_date.DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: DATE_ACTUAL
+        description: Calendar date (alias of DATE).
+        expr: dim_date.DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: DATE_KEY
+        description: Unique calendar date identifier.
+        expr: dim_date.DATE_KEY
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: MONTH_END_DATE
+        description: Last day of the month of the date.
+        expr: dim_date.MONTH_END_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: MONTH_NAME
+        expr: dim_date.MONTH_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: MONTH_YEAR
+        expr: dim_date.MONTH_YEAR
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: QUARTER
+        expr: dim_date.QUARTER
+        data_type: "NUMBER(2,0)"
+        access_modifier: public_access
+      - name: QUARTER_YEAR
+        expr: dim_date.QUARTER_YEAR
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: YEAR
+        expr: dim_date.YEAR
+        data_type: "NUMBER(4,0)"
+        access_modifier: public_access
+  - name: DIM_PRODUCT
+    synonyms:
+      - products
+      - product catalog
+      - service lines
+    description: "Salesforce Product2 dimension (product name, family, code, line type) plus the synthetic One Time Services product used by the Non-Recurring booking rows. Related to opportunities, pipeline_overview, opportunity_stage_history, bookings_overview and booking_lines."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_PRODUCT
+    primary_key:
+      columns:
+        - PRODUCT_KEY
+    dimensions:
+      - name: PRODUCT_CODE
+        description: Product code.
+        expr: dim_product.PRODUCT_CODE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_FAMILY
+        description: Product family / category (Product2 FAMILY).
+        expr: dim_product.PRODUCT_FAMILY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Product surrogate key.
+        expr: dim_product.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_LINE_TYPE
+        description: Product line type (PRODUCT_LINE_C).
+        expr: dim_product.PRODUCT_LINE_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_NAME
+        synonyms:
+          - salesforce product
+        description: Salesforce Product2 name (One Time Services for the synthetic Non-Recurring product).
+        expr: dim_product.PRODUCT_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+  - name: DIM_STAGE_MAPPING
+    synonyms:
+      - stages
+      - sales stages
+      - pipeline stages
+    description: "Opportunity stage dimension from the stage_mapping seed: one row per stage, with type, status, order and pipeline / legacy flags. STAGE_KEY is hashed from the fixed STAGE_ID, not from the stage name. Related to opportunities, opportunity_stage_history and pipeline_overview."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_STAGE_MAPPING
+    primary_key:
+      columns:
+        - STAGE_KEY
+    dimensions:
+      - name: IS_LEGACY_STAGE
+        description: TRUE for a retired stage.
+        expr: dim_stage_mapping.IS_LEGACY_STAGE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: IS_PIPELINE_STAGE
+        description: TRUE for the stages flagged as pipeline stages in stage_mapping.
+        expr: dim_stage_mapping.IS_PIPELINE_STAGE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: STAGE_KEY
+        description: Stage surrogate key (hashed from STAGE_ID).
+        expr: dim_stage_mapping.STAGE_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_NAME
+        synonyms:
+          - stage
+        description: Stage name from stage_mapping.
+        expr: dim_stage_mapping.STAGE_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_ORDER
+        description: Display order of the stage (99 for retired or unordered stages).
+        expr: dim_stage_mapping.STAGE_ORDER
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: STAGE_TYPE
+        description: "Open, Won or Lost."
+        expr: dim_stage_mapping.STAGE_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STATUS
+        description: "Open, Closed Won or Closed Lost."
+        expr: dim_stage_mapping.STATUS
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+  - name: DIM_SUBSIDIARY
+    synonyms:
+      - subsidiary
+      - entity
+      - business unit
+    description: "Subsidiary dimension (NetSuite), for bookings. Only the Non-Recurring booking rows carry a subsidiary."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_SUBSIDIARY
+    primary_key:
+      columns:
+        - SUBSIDIARY_KEY
+    dimensions:
+      - name: SUBSIDIARY_KEY
+        description: Subsidiary surrogate key.
+        expr: dim_subsidiary.SUBSIDIARY_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: SUBSIDIARY_NAME
+        synonyms:
+          - subsidiary
+          - entity name
+        description: Subsidiary / legal entity name.
+        expr: dim_subsidiary.SUBSIDIARY_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+  - name: DIM_USER
+    synonyms:
+      - owner
+      - sales rep
+      - user
+    description: "Salesforce user dimension: the opportunity owner."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: DIM_USER
+    primary_key:
+      columns:
+        - USER_KEY
+    dimensions:
+      - name: ACCOUNT_KEY
+        description: "Key of the account the user belongs to (hashed from the user ACCOUNT_ID, same hash as dim_account.ACCOUNT_KEY). An attribute only: no relationship, to keep a single join path between the fact tables and dim_account."
+        expr: dim_user.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: USER_ID
+        description: Salesforce user ID of the owner.
+        expr: dim_user.USER_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: USER_KEY
+        description: User surrogate key.
+        expr: dim_user.USER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: USER_NAME
+        synonyms:
+          - sales rep
+          - owner name
+        description: Opportunity owner name (from the user dimension).
+        expr: dim_user.USER_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+  - name: OPPORTUNITIES
+    synonyms:
+      - opportunities
+      - pipeline
+      - opportunity lines
+      - deals
+    description: "LINE ITEM LEVEL: one row per opportunity line item (OPPORTUNITY_LINE_ITEM_ID), not one row per opportunity, plus one row for a current opportunity with no line items (fact__opportunity). Opportunity attributes repeat on each line; ACV is a line value; counts are distinct opportunity IDs. Current state of open, won and lost opportunities of any close date (not deleted, not on a Test account); no pipeline-stage or amount filter is applied, so use IS_CLOSED, STATUS or IS_ACTIVE_PIPELINE in the metrics. Deals only, leads are not in this table. Current values only; history is in opportunity_stage_history."
+    base_table:
+      database: PROD_DB
+      schema: GOLD
+      table: FACT_OPPORTUNITY
+    primary_key:
+      columns:
+        - OPPORTUNITY_LINE_KEY
+    dimensions:
+      - name: ACCOUNT_ID
+        description: Raw Salesforce account ID.
+        expr: opportunities.ACCOUNT_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: ACCOUNT_KEY
+        description: Key of the account (dim_account). The relationship key.
+        expr: opportunities.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: ACCOUNT_NAME
+        synonyms:
+          - account
+          - account name
+        description: Salesforce account name.
+        expr: opportunities.ACCOUNT_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: CLOSE_DATE
+        description: "Expected close date while open, actual once closed."
+        expr: opportunities.CLOSE_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: CREATED_DATE
+        description: Opportunity created date.
+        expr: opportunities.CREATED_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: CREATED_QUARTER
+        description: Quarter the opportunity counts as created pipeline (Created Trend axis).
+        expr: YEAR(opportunities.PIPELINE_CREATION_DATE) || '-Q' || QUARTER(opportunities.PIPELINE_CREATION_DATE)
+        data_type: VARCHAR(134217728)
+        access_modifier: public_access
+      - name: DATA_REFRESHED_AT
+        description: Latest source sync behind the opportunity data (Data Refreshed).
+        expr: opportunities.DATA_REFRESHED_AT
+        data_type: TIMESTAMP_NTZ(9)
+        access_modifier: public_access
+      - name: EXPECTED_CLOSE_QUARTER
+        description: "Expected close quarter label, for example 2026-Q4 (stage chart axis)."
+        expr: YEAR(opportunities.CLOSE_DATE) || '-Q' || QUARTER(opportunities.CLOSE_DATE)
+        data_type: VARCHAR(134217728)
+        access_modifier: public_access
+      - name: IS_ACTIVE_PIPELINE
+        description: TRUE when the line is in a pipeline stage and ACV_USD > 0.
+        expr: opportunities.IS_ACTIVE_PIPELINE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: IS_CLOSED
+        description: Salesforce IS_CLOSED.
+        expr: opportunities.IS_CLOSED
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: IS_PIPELINE_STAGE
+        description: TRUE when the stage is flagged as a pipeline stage in stage_mapping.
+        expr: opportunities.IS_PIPELINE_STAGE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: OPPORTUNITY_ID
+        synonyms:
+          - opportunity id
+          - deal id
+        description: Salesforce opportunity ID.
+        expr: opportunities.OPPORTUNITY_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_LINE_ITEM_ID
+        description: Opportunity line item ID; blank for an opportunity with no line items.
+        expr: opportunities.OPPORTUNITY_LINE_ITEM_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_NAME
+        synonyms:
+          - opportunity
+          - deal
+        description: Opportunity name.
+        expr: opportunities.OPPORTUNITY_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_SOURCE
+        synonyms:
+          - opportunity source
+          - deal source
+        description: Opportunity lead source; Unknown when blank.
+        expr: opportunities.OPPORTUNITY_SOURCE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_TYPE
+        description: Salesforce opportunity type.
+        expr: opportunities.OPPORTUNITY_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_ID
+        description: Raw Salesforce owner user ID.
+        expr: opportunities.OWNER_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_KEY
+        description: Key of the opportunity owner (dim_user). The relationship key.
+        expr: opportunities.OWNER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_NAME
+        synonyms:
+          - sales representative
+          - owner
+        description: Opportunity owner name.
+        expr: opportunities.OWNER_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PIPELINE_CREATION_DATE
+        description: Date the opportunity counts as created pipeline; equal to CREATED_DATE.
+        expr: opportunities.PIPELINE_CREATION_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: PRODUCT
+        synonyms:
+          - service line
+          - product name
+        description: Product name of the line (blank for an opportunity with no line items).
+        expr: opportunities.PRODUCT
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Key of the line Salesforce Product2 (dim_product). The relationship key.
+        expr: opportunities.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: REGION
+        description: "Region (placeholder, always blank for now)."
+        expr: opportunities.REGION
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_KEY
+        description: Key of the current stage (dim_stage_mapping). The relationship key; blank when the stage is not in stage_mapping.
+        expr: opportunities.STAGE_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_NAME
+        description: Current stage name.
+        expr: opportunities.STAGE_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_ORDER
+        description: Display order of the stage.
+        expr: opportunities.STAGE_ORDER
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: STAGE_TYPE
+        description: "Stage category: Open, Won or Lost (blank when the stage is not in stage_mapping)."
+        expr: opportunities.STAGE_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STATUS
+        description: "Open, Closed Won or Closed Lost (blank when the stage is not in stage_mapping)."
+        expr: opportunities.STATUS
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+    facts:
+      - name: ACV_USD
+        description: "Line ACV in USD (estimated product ARR change of the line, converted at the Salesforce dated rate on the close date; 0 for an opportunity with no lines). Additive across lines."
+        expr: opportunities.ACV_USD
+        data_type: FLOAT
+        access_modifier: public_access
+      - name: PROBABILITY
+        description: Opportunity win probability (0-100) as stored in Salesforce. Non-additive.
+        expr: opportunities.PROBABILITY
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+    metrics:
+      - name: AVERAGE_OPPORTUNITY_VALUE
+        description: "Average opportunity value (ACV, USD) = open pipeline ACV today / DISTINCT open opportunities, both from this table so a product selection applies to both. Non-additive."
+        expr: "SUM(CASE WHEN NOT opportunities.IS_CLOSED AND opportunities.PIPELINE_CREATION_DATE <= CURRENT_DATE() THEN opportunities.ACV_USD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN NOT opportunities.IS_CLOSED AND opportunities.PIPELINE_CREATION_DATE <= CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVERAGE_OPPORTUNITY_VALUE_PRIOR_YEAR
+        description: "Average opportunity value (ACV, USD) at today minus 12 months, from the lines current values. Non-additive."
+        expr: "SUM(CASE WHEN opportunities.PIPELINE_CREATION_DATE <= ADD_MONTHS(CURRENT_DATE(), -12) AND (NOT opportunities.IS_CLOSED OR opportunities.CLOSE_DATE > ADD_MONTHS(CURRENT_DATE(), -12)) THEN opportunities.ACV_USD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE <= ADD_MONTHS(CURRENT_DATE(), -12) AND (NOT opportunities.IS_CLOSED OR opportunities.CLOSE_DATE > ADD_MONTHS(CURRENT_DATE(), -12)) THEN opportunities.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_LTM
+        description: "Opportunities created in the LTM window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATEADD(day, 1, ADD_MONTHS(CURRENT_DATE(), -12)) AND CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_MTD
+        description: "Opportunities created in the MTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('month', CURRENT_DATE()) AND CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_PY_LTM
+        description: "Opportunities created in the PY_LTM window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATEADD(day, 1, ADD_MONTHS(ADD_MONTHS(CURRENT_DATE(), -12), -12)) AND ADD_MONTHS(CURRENT_DATE(), -12) THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_PY_MTD
+        description: "Opportunities created in the PY_MTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('month', ADD_MONTHS(CURRENT_DATE(), -12)) AND ADD_MONTHS(CURRENT_DATE(), -12) THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_PY_QTD
+        description: "Opportunities created in the PY_QTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('quarter', ADD_MONTHS(CURRENT_DATE(), -12)) AND ADD_MONTHS(CURRENT_DATE(), -12) THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_PY_YTD
+        description: "Opportunities created in the PY_YTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('year', ADD_MONTHS(CURRENT_DATE(), -12)) AND ADD_MONTHS(CURRENT_DATE(), -12) THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_QTD
+        description: "Opportunities created in the QTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('quarter', CURRENT_DATE()) AND CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: CREATED_OPPORTUNITIES_YTD
+        description: "Opportunities created in the YTD window ending today (or today minus 12 months for PY_): DISTINCT opportunities, one per opportunity whatever the product selection."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE BETWEEN DATE_TRUNC('year', CURRENT_DATE()) AND CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: LOST_ACV_USD
+        description: ACV (USD) of Closed Lost opportunity lines. Filter CLOSE_DATE for a period. Additive across lines.
+        expr: SUM(CASE WHEN opportunities.STATUS = 'Closed Lost' THEN opportunities.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: LOST_OPPORTUNITIES
+        description: "Closed Lost opportunities (by the opportunity current stage type): DISTINCT opportunities."
+        expr: COUNT(DISTINCT CASE WHEN opportunities.STATUS = 'Closed Lost' THEN opportunities.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES
+        description: "Open opportunities today: DISTINCT opportunities, so an opportunity with several products counts 1 for any product selection (one product, several, all, or none). Not additive across product rows."
+        expr: COUNT(DISTINCT CASE WHEN NOT opportunities.IS_CLOSED AND opportunities.PIPELINE_CREATION_DATE <= CURRENT_DATE() THEN opportunities.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_PRIOR_YEAR
+        description: "Open opportunities as at today minus 12 months, using the lines current values (created on or before that date and not closed, or closed after it): DISTINCT opportunities. Approximate: it does not use the historical snapshot values the overview uses."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE <= ADD_MONTHS(CURRENT_DATE(), -12) AND (NOT opportunities.IS_CLOSED OR opportunities.CLOSE_DATE > ADD_MONTHS(CURRENT_DATE(), -12)) THEN opportunities.OPPORTUNITY_ID END)"
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_ACV
+        description: "Open pipeline ACV (USD) today: lines of opportunities that are not closed and were created on or before today (same test as the pipeline overview for today). Deals, never leads; test-account, deleted and non-current rows are excluded in the fact. Additive across lines. Group by STAGE_NAME or EXPECTED_CLOSE_QUARTER for the stage chart."
+        expr: SUM(CASE WHEN NOT opportunities.IS_CLOSED AND opportunities.PIPELINE_CREATION_DATE <= CURRENT_DATE() THEN opportunities.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED
+        description: "Opportunities counted as created pipeline (all statuses): DISTINCT opportunities. Use PIPELINE_CREATION_DATE / CREATED_QUARTER for the period and STATUS for the All / Open / Closed Won / Closed Lost toggle."
+        expr: COUNT(DISTINCT CASE WHEN opportunities.PIPELINE_CREATION_DATE IS NOT NULL THEN opportunities.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV
+        description: "ACV (USD) of lines created as pipeline, by PIPELINE_CREATION_DATE."
+        expr: SUM(CASE WHEN opportunities.PIPELINE_CREATION_DATE IS NOT NULL THEN opportunities.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: TOTAL_ACV_USD
+        description: "ACV (USD) of every line in the fact (open, won and lost). Additive across lines."
+        expr: "SUM(COALESCE(opportunities.ACV_USD, 0))"
+        access_modifier: public_access
+      - name: TOTAL_OPPORTUNITIES
+        description: "All opportunities in the fact (any status): DISTINCT opportunities."
+        expr: COUNT(DISTINCT CASE WHEN TRUE THEN opportunities.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: WEIGHTED_OPEN_PIPELINE_ACV
+        description: Open pipeline ACV x probability / 100 (the opportunity Salesforce probability). Additive across lines.
+        expr: "SUM(CASE WHEN NOT opportunities.IS_CLOSED AND opportunities.PIPELINE_CREATION_DATE <= CURRENT_DATE() THEN opportunities.ACV_USD * COALESCE(opportunities.PROBABILITY, 0) / 100 ELSE 0 END)"
+        access_modifier: public_access
+      - name: WIN_RATE
+        description: "Win rate = won / (won + lost) opportunities, DISTINCT opportunities, calculated after aggregation (non-additive). Filter CLOSE_DATE for a period."
+        expr: "COUNT(DISTINCT CASE WHEN opportunities.STATUS = 'Closed Won' THEN opportunities.OPPORTUNITY_ID END) / NULLIF(COUNT(DISTINCT CASE WHEN opportunities.STATUS IN ('Closed Won', 'Closed Lost') THEN opportunities.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: WON_ACV_USD
+        description: "ACV (USD) of Closed Won opportunity lines (opportunity pipeline view, not the bookings metrics). Filter CLOSE_DATE for a period. Additive across lines."
+        expr: SUM(CASE WHEN opportunities.STATUS = 'Closed Won' THEN opportunities.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: WON_OPPORTUNITIES
+        description: "Closed Won opportunities (by the opportunity current stage type): DISTINCT opportunities."
+        expr: COUNT(DISTINCT CASE WHEN opportunities.STATUS = 'Closed Won' THEN opportunities.OPPORTUNITY_ID END)
+        access_modifier: public_access
+  - name: OPPORTUNITY_STAGE_HISTORY
+    synonyms:
+      - stage history
+      - stage changes
+      - stage transitions
+    description: "Stage runs (rpt_gtm__pipeline_stage_history): one row per opportunity x product x continuous period in a stage, with the owner, close date and ACV of the last record of the run (live on the current stage). ACV is the value at the end of the run; use IS_CURRENT_STAGE rows for totals, never sum across stage runs. Runs before the first snapshot version come from Salesforce opportunity history and their ACV and owner are approximate."
+    base_table:
+      database: PROD_DB
+      schema: REPORTING
+      table: RPT_GTM_PIPELINE_STAGE_HISTORY
+    primary_key:
+      columns:
+        - OPPORTUNITY_ID
+        - PRODUCT_KEY
+        - STAGE_RUN_NO
+    dimensions:
+      - name: CLOSE_DATE
+        description: Close date from the last record of the run (live on the current stage).
+        expr: opportunity_stage_history.CLOSE_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: CREATED_DATE
+        description: Opportunity created date.
+        expr: opportunity_stage_history.CREATED_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: IS_CURRENT_STAGE
+        description: TRUE on the last run of each opportunity and product (the Opportunities Summary rows).
+        expr: opportunity_stage_history.IS_CURRENT_STAGE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: IS_LEGACY_STAGE
+        description: Retired stage.
+        expr: opportunity_stage_history.IS_LEGACY_STAGE
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: MILESTONE_1_DATE
+        description: First start of the milestone-1 stage; blank until the milestone flags are filled in stage_mapping. Repeats on every row of the opportunity.
+        expr: opportunity_stage_history.MILESTONE_1_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: MILESTONE_2_DATE
+        description: First start of the milestone-2 stage; blank until the milestone flags are filled in stage_mapping. Repeats on every row of the opportunity.
+        expr: opportunity_stage_history.MILESTONE_2_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: MILESTONE_NO
+        description: 1 or 2 where the stage is a milestone stage in stage_mapping.
+        expr: opportunity_stage_history.MILESTONE_NO
+        data_type: "NUMBER(1,0)"
+        access_modifier: public_access
+      - name: OPPORTUNITY_ID
+        description: Salesforce opportunity ID.
+        expr: opportunity_stage_history.OPPORTUNITY_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_NAME
+        description: Opportunity name (current).
+        expr: opportunity_stage_history.OPPORTUNITY_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_SOURCE
+        description: Opportunity source (lead source) from the last record of the run (live on the current stage).
+        expr: opportunity_stage_history.OPPORTUNITY_SOURCE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_TYPE
+        description: Opportunity type from the last record of the run (live on the current stage).
+        expr: opportunity_stage_history.OPPORTUNITY_TYPE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_KEY
+        description: "Key of the opportunity owner (dim_user), from the last record of the run. The relationship key."
+        expr: opportunity_stage_history.OWNER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_NAME
+        description: Owner name from the last record of the run (live on the current stage). Names can repeat across users; slice on dim_user through OWNER_KEY.
+        expr: opportunity_stage_history.OWNER_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT
+        description: Product name of the lines.
+        expr: opportunity_stage_history.PRODUCT
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_FAMILY
+        description: Product family from dim_product.
+        expr: opportunity_stage_history.PRODUCT_FAMILY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Key of the product (dim_product). The relationship key; part of the grain.
+        expr: opportunity_stage_history.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: REGION
+        description: "Region from the last record of the run (placeholder, always NULL for now)."
+        expr: opportunity_stage_history.REGION
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_END_DATE
+        description: Start date of the next run (Stage End Date); blank for the current stage.
+        expr: opportunity_stage_history.STAGE_END_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: STAGE_KEY
+        description: Key of the stage of this run (dim_stage_mapping). The relationship key; blank when the stage is not in stage_mapping.
+        expr: opportunity_stage_history.STAGE_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_NAME
+        description: Stage of the run.
+        expr: opportunity_stage_history.STAGE_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_RUN_NO
+        description: "1, 2, 3 ... per opportunity and product; a new run starts when the stage differs from the previous reading."
+        expr: opportunity_stage_history.STAGE_RUN_NO
+        data_type: "NUMBER(13,0)"
+        access_modifier: public_access
+      - name: STAGE_START_DATE
+        description: Date of the first reading of the run (Stage Start Date).
+        expr: opportunity_stage_history.STAGE_START_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: STAGE_START_DATE_KEY
+        description: Date key of STAGE_START_DATE (YYYYMMDD). The relationship key to dim_date.
+        expr: opportunity_stage_history.STAGE_START_DATE_KEY
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: STATUS
+        description: "Status of the run, derived from the stage (Open, Closed Won, Closed Lost)."
+        expr: opportunity_stage_history.STATUS
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+    facts:
+      - name: ACV_USD
+        description: Product ACV in USD from the last record of the run (live on the current stage). Non-additive across stage runs; sum only IS_CURRENT_STAGE rows for totals.
+        expr: opportunity_stage_history.ACV_USD
+        data_type: FLOAT
+        access_modifier: public_access
+    metrics:
+      - name: CURRENT_ACV_USD
+        description: "Current opportunity ACV (USD): the value on each opportunity x product current-stage row, so it is not repeated across stage runs."
+        expr: SUM(CASE WHEN opportunity_stage_history.IS_CURRENT_STAGE THEN opportunity_stage_history.ACV_USD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_IN_HISTORY
+        description: Distinct opportunities (non-additive across groups).
+        expr: COUNT(DISTINCT opportunity_stage_history.OPPORTUNITY_ID)
+        access_modifier: public_access
+      - name: STAGE_CHANGES
+        description: Number of stage runs (one per opportunity x product x continuous period in a stage).
+        expr: COUNT(DISTINCT opportunity_stage_history.OPPORTUNITY_ID || '|' || opportunity_stage_history.PRODUCT_KEY || '|' || opportunity_stage_history.STAGE_RUN_NO)
+        access_modifier: public_access
+  - name: PIPELINE_OVERVIEW
+    synonyms:
+      - pipeline KPI
+      - pipeline overview
+      - pipeline cards
+    description: "Pipeline KPIs by as-at date (completed month-ends plus today), metric, product, opportunity source, account, owner, close date and stage, with MTD / QTD / YTD / LTM and prior-year windows (rpt_gtm__pipeline_overview). Rows are not additive across METRIC_NAME. There is no pipeline target data yet."
+    base_table:
+      database: PROD_DB
+      schema: REPORTING
+      table: RPT_GTM_PIPELINE_OVERVIEW
+    primary_key:
+      columns:
+        - AS_OF_DATE
+        - METRIC_NAME
+        - OPPORTUNITY_ID
+        - PRODUCT
+        - OPPORTUNITY_SOURCE
+        - REGION
+        - OWNER_ID
+        - PRODUCT_KEY
+        - ACCOUNT_KEY
+        - CLOSE_DATE
+        - STAGE_NAME
+    dimensions:
+      - name: ACCOUNT_KEY
+        description: Key of the account (dim_account). The relationship key.
+        expr: pipeline_overview.ACCOUNT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: AS_OF_DATE
+        description: Completed month-end or today.
+        expr: pipeline_overview.AS_OF_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: AS_OF_QUARTER
+        description: Quarter label of the as-at date (Pipeline Value Trend axis).
+        expr: YEAR(pipeline_overview.AS_OF_DATE) || '-Q' || QUARTER(pipeline_overview.AS_OF_DATE)
+        data_type: VARCHAR(134217728)
+        access_modifier: public_access
+      - name: CLOSE_DATE
+        description: Expected close date of the row (as at the row date for open pipeline).
+        expr: pipeline_overview.CLOSE_DATE
+        data_type: DATE
+        access_modifier: public_access
+      - name: DATE_KEY
+        description: "Date key of the as-at date (dim__date.DATE_KEY, YYYYMMDD). The relationship key to dim_date."
+        expr: pipeline_overview.DATE_KEY
+        data_type: "NUMBER(38,0)"
+        access_modifier: public_access
+      - name: EXPECTED_CLOSE_QUARTER
+        description: "Expected close quarter label of the row (for example 2026-Q4), from its close date as of the same row."
+        expr: YEAR(pipeline_overview.CLOSE_DATE) || '-Q' || QUARTER(pipeline_overview.CLOSE_DATE)
+        data_type: VARCHAR(134217728)
+        access_modifier: public_access
+      - name: IS_LATEST
+        description: TRUE only on today rows; the cards read these.
+        expr: pipeline_overview.IS_LATEST
+        data_type: BOOLEAN
+        access_modifier: public_access
+      - name: METRIC_NAME
+        description: "Open Pipeline Value, Weighted Pipeline Value, Open Opportunities, Opportunities Created or Pipeline Created Value."
+        expr: pipeline_overview.METRIC_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_ID
+        description: Opportunity ID on the Open Opportunities / Opportunities Created count rows (blank on every other row). The count metrics count distinct IDs.
+        expr: pipeline_overview.OPPORTUNITY_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OPPORTUNITY_SOURCE
+        synonyms:
+          - deal source
+        description: Opportunity Source filter.
+        expr: pipeline_overview.OPPORTUNITY_SOURCE
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_ID
+        description: Owner ID.
+        expr: pipeline_overview.OWNER_ID
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_KEY
+        description: Key of the opportunity owner (dim_user). The relationship key.
+        expr: pipeline_overview.OWNER_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: OWNER_NAME
+        description: Opportunity Owner filter.
+        expr: pipeline_overview.OWNER_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT
+        description: Service Line / Product filter.
+        expr: pipeline_overview.PRODUCT
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_FAMILY
+        description: "Salesforce Product2 family of the line product, from dim_product."
+        expr: pipeline_overview.PRODUCT_FAMILY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: PRODUCT_KEY
+        description: Product key of the line Salesforce Product2 (relates to dim_product).
+        expr: pipeline_overview.PRODUCT_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: REGION
+        description: "Region (placeholder, always blank for now)."
+        expr: pipeline_overview.REGION
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_KEY
+        description: "Key of the stage (dim_stage_mapping): the stage at the as-at date for open metrics, the current stage for created metrics. The relationship key; blank when the stage is not in stage_mapping."
+        expr: pipeline_overview.STAGE_KEY
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+      - name: STAGE_NAME
+        description: "Stage name of the row (stage at the as-at date for open metrics, current stage for created metrics), for open pipeline by stage. Plain text, not a key."
+        expr: pipeline_overview.STAGE_NAME
+        data_type: VARCHAR(16777216)
+        access_modifier: public_access
+    facts:
+      - name: LTM
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.LTM
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: MTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.MTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_LTM
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.PY_LTM
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_MTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.PY_MTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_QTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.PY_QTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: PY_YTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.PY_YTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: QTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.QTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+      - name: YTD
+        description: Window value of the row METRIC_NAME. Open metrics hold the same as-at level in every current window and the prior-year level in PY_*; created metrics are windowed. Never add across METRIC_NAME.
+        expr: pipeline_overview.YTD
+        data_type: "NUMBER(38,6)"
+        access_modifier: public_access
+    metrics:
+      - name: AVG_OPPORTUNITY_VALUE_ACV_LTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.LTM ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_MTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.MTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_PYLTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_LTM ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_PYMTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_MTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_PYQTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_QTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_PYYTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_YTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_QTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.QTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: AVG_OPPORTUNITY_VALUE_ACV_YTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Average Opportunity Value (ACV) = open pipeline ACV / open opportunities, calculated after aggregation (non-additive)."
+        expr: "SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.YTD ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END), 0)"
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_ASAT
+        description: TREND. Open Opportunities (COUNT) as it stood at each as-at date; use one date per bar (month-end dates plus today). Responds to the Trend Period and business filters.
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_LTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_MTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_PYLTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window PY_LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_PYMTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window PY_MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_PYQTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window PY_QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_PYYTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window PY_YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.PY_YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_QTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_OPPORTUNITIES_YTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of open opportunities, window YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Open Opportunities' AND pipeline_overview.YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_ACV_ASAT
+        description: TREND. Open Pipeline Value (ACV) as it stood at each as-at date; use one date per bar (month-end dates plus today). Responds to the Trend Period and business filters.
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_LTM
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_MTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_PYLTM
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window PY_LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_PYMTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window PY_MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_PYQTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window PY_QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_PYYTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window PY_YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_QTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPEN_PIPELINE_VALUE_YTD
+        description: "KPI CARD. Open pipeline value (ACV, USD) at the as-at date, window YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Open Pipeline Value' THEN pipeline_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_LTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_MTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_PYLTM
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window PY_LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.PY_LTM = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_PYMTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window PY_MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.PY_MTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_PYQTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window PY_QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.PY_QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_PYYTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window PY_YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.PY_YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_QTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.QTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: OPPORTUNITIES_CREATED_YTD
+        description: "Distinct opportunities: an opportunity counts 1 whatever the product, owner or stage selection (not additive across groups). KPI CARD. Number of opportunities created in the window, window YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: COUNT(DISTINCT CASE WHEN pipeline_overview.METRIC_NAME = 'Opportunities Created' AND pipeline_overview.YTD = 1 THEN pipeline_overview.OPPORTUNITY_ID END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_LTM
+        description: "KPI CARD. ACV of pipeline created in the window, window LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_MTD
+        description: "KPI CARD. ACV of pipeline created in the window, window MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_PYLTM
+        description: "KPI CARD. ACV of pipeline created in the window, window PY_LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_PYMTD
+        description: "KPI CARD. ACV of pipeline created in the window, window PY_MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_PYQTD
+        description: "KPI CARD. ACV of pipeline created in the window, window PY_QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_PYYTD
+        description: "KPI CARD. ACV of pipeline created in the window, window PY_YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_QTD
+        description: "KPI CARD. ACV of pipeline created in the window, window QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: PIPELINE_CREATED_ACV_YTD
+        description: "KPI CARD. ACV of pipeline created in the window, window YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Pipeline Created Value' THEN pipeline_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_ACV_ASAT
+        description: TREND. Weighted Pipeline Value (ACV) as it stood at each as-at date; use one date per bar (month-end dates plus today). Responds to the Trend Period and business filters.
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_LTM
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_MTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_PYLTM
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window PY_LTM. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.PY_LTM ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_PYMTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window PY_MTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.PY_MTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_PYQTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window PY_QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.PY_QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_PYYTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window PY_YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.PY_YTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_QTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window QTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.QTD ELSE 0 END)
+        access_modifier: public_access
+      - name: WEIGHTED_PIPELINE_VALUE_YTD
+        description: "KPI CARD. Open pipeline ACV weighted by the opportunity probability, window YTD. Returns the value at every as-at date (one value per date, never forced to 0): for the card filter to today (IS_LATEST = TRUE) or pick one date; responds to product, deal source and owner."
+        expr: SUM(CASE WHEN pipeline_overview.METRIC_NAME = 'Weighted Pipeline Value' THEN pipeline_overview.YTD ELSE 0 END)
+        access_modifier: public_access
+relationships:
+  - name: BOOKINGS_KPI_TO_ACCOUNT
+    left_table: BOOKINGS_OVERVIEW
+    right_table: DIM_ACCOUNT
+    relationship_columns:
+      - left_column: ACCOUNT_KEY
+        right_column: ACCOUNT_KEY
+  - name: BOOKINGS_KPI_TO_CALENDAR
+    left_table: BOOKINGS_OVERVIEW
+    right_table: DIM_DATE
+    relationship_columns:
+      - left_column: DATE_KEY
+        right_column: DATE_KEY
+  - name: BOOKINGS_KPI_TO_PRODUCT
+    left_table: BOOKINGS_OVERVIEW
+    right_table: DIM_PRODUCT
+    relationship_columns:
+      - left_column: PRODUCT_KEY
+        right_column: PRODUCT_KEY
+  - name: BOOKINGS_KPI_TO_SUBSIDIARY
+    left_table: BOOKINGS_OVERVIEW
+    right_table: DIM_SUBSIDIARY
+    relationship_columns:
+      - left_column: SUBSIDIARY_KEY
+        right_column: SUBSIDIARY_KEY
+  - name: BOOKINGS_KPI_TO_USER
+    left_table: BOOKINGS_OVERVIEW
+    right_table: DIM_USER
+    relationship_columns:
+      - left_column: OWNER_KEY
+        right_column: USER_KEY
+  - name: BOOKINGS_TO_ACCOUNT
+    left_table: BOOKING_LINES
+    right_table: DIM_ACCOUNT
+    relationship_columns:
+      - left_column: ACCOUNT_KEY
+        right_column: ACCOUNT_KEY
+  - name: BOOKINGS_TO_CALENDAR
+    left_table: BOOKING_LINES
+    right_table: DIM_DATE
+    relationship_columns:
+      - left_column: BOOKING_DATE
+        right_column: DATE
+  - name: BOOKINGS_TO_PRODUCT
+    left_table: BOOKING_LINES
+    right_table: DIM_PRODUCT
+    relationship_columns:
+      - left_column: PRODUCT_KEY
+        right_column: PRODUCT_KEY
+  - name: BOOKINGS_TO_SUBSIDIARY
+    left_table: BOOKING_LINES
+    right_table: DIM_SUBSIDIARY
+    relationship_columns:
+      - left_column: SUBSIDIARY_KEY
+        right_column: SUBSIDIARY_KEY
+  - name: BOOKINGS_TO_USER
+    left_table: BOOKING_LINES
+    right_table: DIM_USER
+    relationship_columns:
+      - left_column: OWNER_KEY
+        right_column: USER_KEY
+  - name: OPPORTUNITIES_TO_ACCOUNT
+    left_table: OPPORTUNITIES
+    right_table: DIM_ACCOUNT
+    relationship_columns:
+      - left_column: ACCOUNT_KEY
+        right_column: ACCOUNT_KEY
+  - name: OPPORTUNITIES_TO_CALENDAR
+    left_table: OPPORTUNITIES
+    right_table: DIM_DATE
+    relationship_columns:
+      - left_column: PIPELINE_CREATION_DATE
+        right_column: DATE
+  - name: OPPORTUNITIES_TO_PRODUCT
+    left_table: OPPORTUNITIES
+    right_table: DIM_PRODUCT
+    relationship_columns:
+      - left_column: PRODUCT_KEY
+        right_column: PRODUCT_KEY
+  - name: OPPORTUNITIES_TO_STAGE
+    left_table: OPPORTUNITIES
+    right_table: DIM_STAGE_MAPPING
+    relationship_columns:
+      - left_column: STAGE_KEY
+        right_column: STAGE_KEY
+  - name: OPPORTUNITIES_TO_USER
+    left_table: OPPORTUNITIES
+    right_table: DIM_USER
+    relationship_columns:
+      - left_column: OWNER_KEY
+        right_column: USER_KEY
+  - name: STAGE_HISTORY_TO_CALENDAR
+    left_table: OPPORTUNITY_STAGE_HISTORY
+    right_table: DIM_DATE
+    relationship_columns:
+      - left_column: STAGE_START_DATE_KEY
+        right_column: DATE_KEY
+  - name: STAGE_HISTORY_TO_PRODUCT
+    left_table: OPPORTUNITY_STAGE_HISTORY
+    right_table: DIM_PRODUCT
+    relationship_columns:
+      - left_column: PRODUCT_KEY
+        right_column: PRODUCT_KEY
+  - name: STAGE_HISTORY_TO_STAGE
+    left_table: OPPORTUNITY_STAGE_HISTORY
+    right_table: DIM_STAGE_MAPPING
+    relationship_columns:
+      - left_column: STAGE_KEY
+        right_column: STAGE_KEY
+  - name: STAGE_HISTORY_TO_USER
+    left_table: OPPORTUNITY_STAGE_HISTORY
+    right_table: DIM_USER
+    relationship_columns:
+      - left_column: OWNER_KEY
+        right_column: USER_KEY
+  - name: PIPELINE_KPI_TO_ACCOUNT
+    left_table: PIPELINE_OVERVIEW
+    right_table: DIM_ACCOUNT
+    relationship_columns:
+      - left_column: ACCOUNT_KEY
+        right_column: ACCOUNT_KEY
+  - name: PIPELINE_KPI_TO_CALENDAR
+    left_table: PIPELINE_OVERVIEW
+    right_table: DIM_DATE
+    relationship_columns:
+      - left_column: DATE_KEY
+        right_column: DATE_KEY
+  - name: PIPELINE_KPI_TO_PRODUCT
+    left_table: PIPELINE_OVERVIEW
+    right_table: DIM_PRODUCT
+    relationship_columns:
+      - left_column: PRODUCT_KEY
+        right_column: PRODUCT_KEY
+  - name: PIPELINE_KPI_TO_STAGE
+    left_table: PIPELINE_OVERVIEW
+    right_table: DIM_STAGE_MAPPING
+    relationship_columns:
+      - left_column: STAGE_KEY
+        right_column: STAGE_KEY
+  - name: PIPELINE_KPI_TO_USER
+    left_table: PIPELINE_OVERVIEW
+    right_table: DIM_USER
+    relationship_columns:
+      - left_column: OWNER_KEY
+        right_column: USER_KEY
+module_custom_instructions:
+  sql_generation: |-
+    A. SOURCE SELECTION
+        1. Use the predefined metric for a business term; never rebuild it from raw filters.
+        2. Never combine bookings and pipeline in one query unless the view defines a relationship between them. Use one query per side.
+        3. Do not combine pre-computed KPI metrics and detail-level metrics in one query unless a predefined metric does so. Use two subqueries joined on shared dimensions.
+        4. Where a table holds one row set per metric name, rows are not additive across metric names. Filter to the metric asked for, or use the predefined metric.
+        B. DATES AND WINDOWS
+        1. For pre-computed KPI snapshots, filter to exactly one as-at date by equality. Never use ranges, and never sum month-to-date, quarter-to-date, year-to-date or last-twelve-month columns across dates.
+        2. Choose the window column that matches the question. For monthly series, return one monthly value per as-at month, and use the prior-year column for the same month last year.
+        3. For detail-level bookings queries, cap the date at the latest as-at date of the bookings KPI object.
+        4. Point-in-time metrics (open pipeline, weighted pipeline, open opportunities) are the same in every window. Created values are flows over the window.
+        5. Resolve relative dates from CURRENT_DATE() using the view's calendar. If no fiscal calendar is defined, use calendar periods and say so. "Last quarter" is the last completed quarter; "this quarter" is the current quarter to date.
+        6. Use the date that matches the event: booking date for bookings, close date for won, lost and expected close, created date for created opportunities.
+        C. METRIC INTEGRITY
+        1. Do not apply ABS() or negation to metrics. Sign handling is built in; present values as returned. Where reversals exist, gross is the sum of positive lines and reversals the sum of negative lines.
+        2. Recurring and non-recurring bookings, and new and upsell categories, come from the predefined metrics. Do not redefine them. Booking categories are bookings, not ARR balances.
+        3. Never add monthly movements to get a quarter, year or twelve-month value. Read the window column at one as-at date.
+        4. Count deals with the predefined count metrics (distinct IDs). Never count rows, and never sum values across history or stage-run rows: use current-state rows.
+        5. Use the predefined win-rate metric. If asked for win rate by value, compute won value / (won value + lost value) from the predefined metrics and say so.
+        6. There are no pipeline targets: do not compute target attainment or coverage ratio.
+        7. Never average pre-computed ratios or percentages. Recompute from the summed numerator and denominator.
+        D. FILTERS AND JOINS
+        1. Join only through defined relationships. If a dimension is not related to the chosen metric's table, say so instead of forcing a join.
+        2. Use ILIKE '%value%' for name filters.
+        3. Never hardcode product, entity, owner or account names. Read them from the dimension values.
+        E. CALCULATIONS AND OUTPUT
+        1. Variance % = DIV0NULL(actual - comparison, ABS(comparison)). Return actual, comparison and both variances.
+        2. Include the as-at date or period and the grouping dimension as output columns.
+        3. Order trends chronologically, never by period name text.
+        4. Top-N default is 10.
+        5. Drill-down: use the same metric and filters as the parent question, group by deal, order by value descending, LIMIT 100.
+        6. Show percentages as 0.0% and currency in the view's reporting currency.
+        7. If the requested metric, comparison or dimension is not available on the chosen source, say so and return the closest supported result.
+    F. Trend data visualisation
+    1. If the user asks for a single month, quarter or year (single row output), show the start and end date.
+    2. If the user asks for data at a monthly level, show only the month and the values, with no sorting or duplicate date fields. Do the same for quarter and year.
+    3. If the user asks for year-to-date data, show the YTD value for the current year and not a monthly series.
+  question_categorization: |-
+    Classify each GTM question into the categories below BEFORE choosing tables or metrics. A question can match more than one category (for example 1 + 2); apply the routing of each. Use only the tables, metrics and dimensions defined in the semantic view.
+
+    CATEGORIES
+    1. Headline KPIs for a standard period (a month, quarter to date, year to date, last twelve months) for bookings or pipeline: use the view's pre-computed KPI or overview objects where they exist.
+    2. Prior-year comparison and growth: use the prior-year columns or metrics the view provides. If none exist for the requested metric, say so.
+    3. Breakdown, ranking or top-N by a dimension (product, entity, account, owner, stage, source): use the object that offers that dimension. If the dimension is not available for the metric, say so.
+    4. Drill-down, custom date range, or lists of individual deals or booking rows: use detail-level (line or opportunity) objects.
+    5. Trend or time series: use one value per month or quarter from the KPI objects where available.
+    6. Stage movement, time in stage, win and loss, or sales cycle: use the opportunity and stage objects.
+    7. Bookings compared with pipeline: never join them. Run one query per side and compare totals, months or products only, and say the bases differ.
+    8. Definitions or lists of dimension values: dimension tables only, no metrics.
+
+    ASK FOR CLARIFICATION WHEN
+    1. No time period is given. Assume the latest available period of the matching KPI object (the latest completed month for bookings, the latest as-at date for pipeline) and state the assumption.
+    2. A metric has competing definitions (win rate by count or by value, recurring versus total bookings). Pick the best match, say which was used, and mention the alternative.
+    3. A named account, owner or product matches several records.
+
+    OUT OF SCOPE (DO NOT GENERATE SQL)
+    - Forecasts, projections and "what if" questions.
+    - A bookings plan or budget, pipeline targets, target attainment and coverage ratio: the view defines none.
+    - ARR balance, retention, churn, renewals due and customer counts, unless the view defines them.
+    - Price, discount, cost, CAC, invoices, revenue and headcount.
+    - Leads, unless the view contains them.
+    - Linking individual deals to bookings, unless the view defines that relationship.
+    - Any data change.
+    For these, say briefly what is not supported and suggest the nearest in-scope question.
+verified_queries:
+  - name: PRODUCTS_SUBSIDIARIES_GROWING_OR_SHRINKING
+    sql: "\n      -- Find the latest month-end that bookings are reported for.\n      WITH latest AS (\n        SELECT\n          MAX(as_of_date) AS max_date\n        FROM\n          bookings_overview\n      ),\n      -- For each product and subsidiary, take Total Bookings year to date and for the same period last year.\n      bookings_summary AS (\n        SELECT\n          bo.product,\n          bo.subsidiary_name,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS total_bookings_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS total_bookings_py_ytd\n        FROM\n          bookings_overview AS bo\n          CROSS JOIN latest\n        WHERE\n          bo.as_of_date = latest.max_date\n        GROUP BY\n          bo.product,\n          bo.subsidiary_name\n      )\n      -- Work out the change and percentage change and label each as Growing, Shrinking or Flat; the percentage is blank where last year had no bookings.\n      SELECT\n        bs.product,\n        bs.subsidiary_name,\n        bs.total_bookings_ytd,\n        bs.total_bookings_py_ytd,\n        bs.total_bookings_ytd - bs.total_bookings_py_ytd AS ytd_abs_chg,\n        (bs.total_bookings_ytd - bs.total_bookings_py_ytd) / NULLIF(NULLIF(bs.total_bookings_py_ytd, 0), 0) AS ytd_pct_chg,\n        CASE\n          WHEN bs.total_bookings_ytd > bs.total_bookings_py_ytd THEN 'Growing'\n          WHEN bs.total_bookings_ytd < bs.total_bookings_py_ytd THEN 'Shrinking'\n          ELSE 'Flat'\n        END AS trend\n      FROM\n        bookings_summary AS bs\n      ORDER BY\n        ytd_abs_chg DESC NULLS LAST\n      "
+    question: Which products and subsidiaries are growing or shrinking?
+  - name: RECURRING_VS_NON_RECURRING_BOOKINGS_YTD
+    sql: "\n      -- Take year to date and last year to date for Recurring, Non-Recurring and Total Bookings at the latest month-end.\n      WITH base AS (\n        SELECT\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Recurring Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS recurring_bookings_ytd_2026,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Non-Recurring Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS non_recurring_bookings_ytd_2026,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS total_bookings_ytd_2026,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Recurring Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS recurring_bookings_ytd_2025,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Non-Recurring Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS non_recurring_bookings_ytd_2025,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS total_bookings_ytd_2025\n        FROM\n          bookings_overview AS bo\n        WHERE\n          bo.is_latest = TRUE\n      )\n      -- Calculate the recurring share of total for each year, the change in share (0.05 = 5 percentage points) and the change in recurring dollars.\n      SELECT\n        recurring_bookings_ytd_2026,\n        non_recurring_bookings_ytd_2026,\n        total_bookings_ytd_2026,\n        recurring_bookings_ytd_2025,\n        non_recurring_bookings_ytd_2025,\n        total_bookings_ytd_2025,\n        recurring_bookings_ytd_2026 / NULLIF(NULLIF(total_bookings_ytd_2026, 0), 0) AS recurring_pct_ytd_2026,\n        recurring_bookings_ytd_2025 / NULLIF(NULLIF(total_bookings_ytd_2025, 0), 0) AS recurring_pct_ytd_2025,\n        (\n          recurring_bookings_ytd_2026 / NULLIF(NULLIF(total_bookings_ytd_2026, 0), 0)\n        ) - (\n          recurring_bookings_ytd_2025 / NULLIF(NULLIF(total_bookings_ytd_2025, 0), 0)\n        ) AS recurring_pct_diff_pp,\n        recurring_bookings_ytd_2026 - recurring_bookings_ytd_2025 AS recurring_bookings_dollar_diff\n      FROM\n        base\n      "
+    question: "How much of our bookings is recurring (vs non-recurring) year-to-date in 2026, and how does that compare to year-to-date in 2025?"
+  - name: BOOKINGS_VS_LAST_YEAR_BY_TYPE
+    sql: "\n      -- Take year to date and last year to date for each booking type at the latest month-end.\n      WITH base AS (\n        SELECT\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS total_bookings_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Total Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS total_bookings_py_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Recurring Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS recurring_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Recurring Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS recurring_py_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Non-Recurring Bookings' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS non_recurring_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'Non-Recurring Bookings' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS non_recurring_py_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'ARR (New)' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS arr_new_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'ARR (New)' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS arr_new_py_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'ARR (Upsell)' THEN bo.ytd\n              ELSE 0\n            END\n          ) AS arr_upsell_ytd,\n          SUM(\n            CASE\n              WHEN bo.metric_name = 'ARR (Upsell)' THEN bo.py_ytd\n              ELSE 0\n            END\n          ) AS arr_upsell_py_ytd\n        FROM\n          bookings_overview AS bo\n        WHERE\n          bo.is_latest = TRUE\n      ),\n      -- One row per booking type with the change and percentage change; Total Bookings is shown but left out of the largest-mover highlight. Recurring already includes ARR New and ARR Upsell, so those groups overlap.\n      breakdown AS (\n        SELECT\n          'Total Bookings' AS booking_type,\n          1 AS sort_order,\n          total_bookings_ytd AS current_ytd,\n          total_bookings_py_ytd AS prior_year_ytd,\n          total_bookings_ytd - total_bookings_py_ytd AS absolute_change,\n          (total_bookings_ytd - total_bookings_py_ytd) / NULLIF(NULLIF(total_bookings_py_ytd, 0), 0) AS pct_change,\n          FALSE AS eligible_for_driver\n        FROM\n          base\n        UNION ALL\n        SELECT\n          'Recurring Bookings' AS booking_type,\n          2 AS sort_order,\n          recurring_ytd AS current_ytd,\n          recurring_py_ytd AS prior_year_ytd,\n          recurring_ytd - recurring_py_ytd AS absolute_change,\n          (recurring_ytd - recurring_py_ytd) / NULLIF(NULLIF(recurring_py_ytd, 0), 0) AS pct_change,\n          TRUE AS eligible_for_driver\n        FROM\n          base\n        UNION ALL\n        SELECT\n          'Non-Recurring Bookings' AS booking_type,\n          3 AS sort_order,\n          non_recurring_ytd AS current_ytd,\n          non_recurring_py_ytd AS prior_year_ytd,\n          non_recurring_ytd - non_recurring_py_ytd AS absolute_change,\n          (non_recurring_ytd - non_recurring_py_ytd) / NULLIF(NULLIF(non_recurring_py_ytd, 0), 0) AS pct_change,\n          TRUE AS eligible_for_driver\n        FROM\n          base\n        UNION ALL\n        SELECT\n          'ARR (New)' AS booking_type,\n          4 AS sort_order,\n          arr_new_ytd AS current_ytd,\n          arr_new_py_ytd AS prior_year_ytd,\n          arr_new_ytd - arr_new_py_ytd AS absolute_change,\n          (arr_new_ytd - arr_new_py_ytd) / NULLIF(NULLIF(arr_new_py_ytd, 0), 0) AS pct_change,\n          TRUE AS eligible_for_driver\n        FROM\n          base\n        UNION ALL\n        SELECT\n          'ARR (Upsell)' AS booking_type,\n          5 AS sort_order,\n          arr_upsell_ytd AS current_ytd,\n          arr_upsell_py_ytd AS prior_year_ytd,\n          arr_upsell_ytd - arr_upsell_py_ytd AS absolute_change,\n          (arr_upsell_ytd - arr_upsell_py_ytd) / NULLIF(NULLIF(arr_upsell_py_ytd, 0), 0) AS pct_change,\n          TRUE AS eligible_for_driver\n        FROM\n          base\n      )\n      -- Flag the booking type with the largest change in dollars (a tie flags more than one).\n      SELECT\n        booking_type,\n        current_ytd,\n        prior_year_ytd,\n        absolute_change,\n        pct_change,\n        CASE\n          WHEN eligible_for_driver\n          AND ABS(absolute_change) = MAX(\n            CASE\n              WHEN eligible_for_driver THEN ABS(absolute_change)\n              ELSE NULL\n            END\n          ) OVER () THEN TRUE\n          ELSE FALSE\n        END AS is_largest_driver\n      FROM\n        breakdown\n      ORDER BY\n        sort_order\n      "
+    question: "How are bookings tracking against last year, and what's driving it?"
+  - name: PIPELINE_TREND_BY_QUARTER
+    sql: "\n      -- Get open and weighted pipeline for each reporting date in the last 365 days.\n      WITH pipeline_dates AS (\n        SELECT\n          *\n        FROM\n          SEMANTIC_VIEW(\n            PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS open_pipeline_acv_asat,\n            weighted_pipeline_acv_asat DIMENSIONS pipeline_overview.as_of_date,\n            as_of_quarter\n            WHERE\n              pipeline_overview.as_of_date >= DATEADD(DAY, -365, CURRENT_DATE)\n          )\n      ),\n      -- Choose one date per quarter: the last date for finished quarters, the latest date for the current quarter. Check that the result shows one row per quarter.\n      quarter_end_dates AS (\n        SELECT\n          as_of_quarter,\n          CASE\n            WHEN as_of_quarter < YEAR(CURRENT_DATE) || '-Q' || QUARTER(CURRENT_DATE) THEN LAST_VALUE(as_of_date) OVER (\n              PARTITION BY as_of_quarter\n              ORDER BY\n                as_of_date\n            )\n            ELSE MAX(as_of_date) OVER (PARTITION BY as_of_quarter)\n          END AS selected_date\n        FROM\n          pipeline_dates\n      ),\n      -- List each quarter once with its chosen date.\n      unique_quarter_dates AS (\n        SELECT\n          DISTINCT as_of_quarter,\n          selected_date\n        FROM\n          quarter_end_dates\n      )\n      -- Keep only the chosen date for each quarter, newest quarter first.\n      SELECT\n        p.as_of_quarter,\n        uqd.selected_date AS as_of_date,\n        p.open_pipeline_acv_asat,\n        p.weighted_pipeline_acv_asat\n      FROM\n        pipeline_dates AS p\n        JOIN unique_quarter_dates AS uqd ON p.as_of_quarter = uqd.as_of_quarter\n        AND p.as_of_date = uqd.selected_date\n      ORDER BY\n        p.as_of_quarter DESC NULLS LAST\n      "
+    question: 'What is the weighted and unweighted pipeline trend by Quarter in the last 1 year? '
+  - name: TOP_5_OPEN_OPPORTUNITIES
+    sql: "\n      SELECT\n        o.opportunity_name,\n        o.opportunity_id,\n        SUM(\n          CASE\n            WHEN NOT o.is_closed\n            AND o.pipeline_creation_date <= CURRENT_DATE THEN o.acv_usd\n            ELSE 0\n          END\n        ) AS open_pipeline_acv,\n        MAX(o.stage_name) AS current_stage,\n        MAX(o.close_date) AS expected_close_date\n      FROM\n        opportunities AS o\n      -- Only open opportunities created on or before today; stage and close date repeat on every line of an opportunity, so MAX returns the single value.\n      WHERE\n        NOT o.is_closed\n        AND o.pipeline_creation_date <= CURRENT_DATE\n      GROUP BY\n        o.opportunity_name,\n        o.opportunity_id\n      ORDER BY\n        open_pipeline_acv DESC NULLS LAST\n      LIMIT\n        5\n      "
+    question: What are the top 5 open opportunities by value? Show their value along with current stage and Expected close date
+  - name: OPEN_OPPORTUNITIES_TODAY
+    sql: "\n      SELECT\n        *\n      FROM\n        SEMANTIC_VIEW(\n          PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS open_opportunities_mtd\n          WHERE\n            pipeline_overview.is_latest = TRUE\n        )\n      "
+    question: What is the number of open opportunities as of today?
+  - name: OPPORTUNITIES_CREATED_VS_PRIOR_YEAR
+    sql: "\n      -- Get the created counts for this year and last year for each period as at today.\n      WITH current_periods AS (\n        SELECT\n          *\n        FROM\n          SEMANTIC_VIEW(\n            PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS opportunities_created_mtd,\n            opportunities_created_qtd,\n            opportunities_created_ytd,\n            opportunities_created_pymtd,\n            opportunities_created_pyqtd,\n            opportunities_created_pyytd\n            WHERE\n              pipeline_overview.is_latest = TRUE\n          )\n      ),\n      -- One row per period (MTD, QTD, YTD) with the change and percentage change; the percentage is blank where last year was zero.\n      results AS (\n        SELECT\n          'MTD' AS window_period,\n          opportunities_created_mtd AS current_value,\n          opportunities_created_pymtd AS prior_year_value,\n          opportunities_created_mtd - opportunities_created_pymtd AS absolute_change,\n          CASE\n            WHEN opportunities_created_pymtd <> 0 THEN (\n              opportunities_created_mtd - opportunities_created_pymtd\n            ) / NULLIF(opportunities_created_pymtd, 0)\n            ELSE NULL\n          END AS pct_change\n        FROM\n          current_periods\n        UNION ALL\n        SELECT\n          'QTD' AS window_period,\n          opportunities_created_qtd AS current_value,\n          opportunities_created_pyqtd AS prior_year_value,\n          opportunities_created_qtd - opportunities_created_pyqtd AS absolute_change,\n          CASE\n            WHEN opportunities_created_pyqtd <> 0 THEN (\n              opportunities_created_qtd - opportunities_created_pyqtd\n            ) / NULLIF(opportunities_created_pyqtd, 0)\n            ELSE NULL\n          END AS pct_change\n        FROM\n          current_periods\n        UNION ALL\n        SELECT\n          'YTD' AS window_period,\n          opportunities_created_ytd AS current_value,\n          opportunities_created_pyytd AS prior_year_value,\n          opportunities_created_ytd - opportunities_created_pyytd AS absolute_change,\n          CASE\n            WHEN opportunities_created_pyytd <> 0 THEN (\n              opportunities_created_ytd - opportunities_created_pyytd\n            ) / NULLIF(opportunities_created_pyytd, 0)\n            ELSE NULL\n          END AS pct_change\n        FROM\n          current_periods\n      )\n      -- Show the percentage with one decimal and order the rows MTD, QTD, YTD.\n      SELECT\n        window_period,\n        current_value,\n        prior_year_value,\n        absolute_change,\n        TO_CHAR(ROUND(pct_change * 100, 1)) || '%' AS pct_change_formatted\n      FROM\n        results\n      ORDER BY\n        CASE\n          window_period\n          WHEN 'MTD' THEN 1\n          WHEN 'QTD' THEN 2\n          WHEN 'YTD' THEN 3\n        END\n      "
+    question: "What is the number of opportunities created MTD, QTD, YTD? Compare with previous year and show the growth? "
+  - name: RECURRING_NON_RECURRING_TOTAL_BOOKINGS_WINDOWS
+    sql: "\n      SELECT\n        bo.metric_name,\n        SUM(\n          CASE\n            WHEN bo.metric_name IN (\n              'Recurring Bookings',\n              'Non-Recurring Bookings',\n              'Total Bookings'\n            ) THEN bo.ltm\n            ELSE 0\n          END\n        ) AS ltm_value,\n        SUM(\n          CASE\n            WHEN bo.metric_name IN (\n              'Recurring Bookings',\n              'Non-Recurring Bookings',\n              'Total Bookings'\n            ) THEN bo.mtd\n            ELSE 0\n          END\n        ) AS mtd_value,\n        SUM(\n          CASE\n            WHEN bo.metric_name IN (\n              'Recurring Bookings',\n              'Non-Recurring Bookings',\n              'Total Bookings'\n            ) THEN bo.qtd\n            ELSE 0\n          END\n        ) AS qtd_value,\n        SUM(\n          CASE\n            WHEN bo.metric_name IN (\n              'Recurring Bookings',\n              'Non-Recurring Bookings',\n              'Total Bookings'\n            ) THEN bo.ytd\n            ELSE 0\n          END\n        ) AS ytd_value\n      FROM\n        bookings_overview AS bo\n      WHERE\n        bo.is_latest = TRUE\n        AND bo.metric_name IN (\n          'Recurring Bookings',\n          'Non-Recurring Bookings',\n          'Total Bookings'\n        )\n      GROUP BY\n        bo.metric_name\n      ORDER BY\n        CASE\n          bo.metric_name\n          WHEN 'Total Bookings' THEN 1\n          WHEN 'Recurring Bookings' THEN 2\n          WHEN 'Non-Recurring Bookings' THEN 3\n        END\n      "
+    question: "What are the LTM, MTD, QTD and YTD values for recurring, non-recurring and total bookings?"
+  - name: OPEN_PIPELINE_AND_DATED_TO_CLOSE
+    sql: "\n      -- First part: open and weighted pipeline as at today. Second part: value of opportunity lines by close date.\n      SELECT\n        sv1.open_pipeline_acv,\n        sv1.weighted_open_pipeline_acv,\n        sv2.dated_to_close\n      FROM\n        (\n          SELECT\n            *\n          FROM\n            SEMANTIC_VIEW(\n              PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS open_pipeline_value_ytd AS open_pipeline_acv,\n              weighted_pipeline_value_ytd AS weighted_open_pipeline_acv\n              WHERE\n                pipeline_overview.is_latest = TRUE\n            )\n        ) AS sv1\n      -- Dated to close adds up every status (open, won and lost) with a close date from 1 Oct to 31 Dec 2026; update these dates each quarter.\n        CROSS JOIN (\n          SELECT\n            *\n          FROM\n            SEMANTIC_VIEW(\n              PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS total_acv_usd AS dated_to_close\n              WHERE\n                opportunities.close_date >= '2026-10-01'\n                AND opportunities.close_date <= '2026-12-31'\n            )\n        ) AS sv2\n      "
+    question: "What does open pipeline look like, and how much will realistically close this quarter?"
+  - name: AVG_OPPORTUNITY_VALUE_MTD
+    sql: "\n      SELECT\n        *\n      FROM\n        SEMANTIC_VIEW(\n          PROD_DB.SEMANTIC_VIEWS.gtm_analytics METRICS avg_opportunity_value_acv_mtd\n          WHERE\n            pipeline_overview.is_latest = TRUE\n        )\n      "
+    question: What is the MTD average opportunity value?

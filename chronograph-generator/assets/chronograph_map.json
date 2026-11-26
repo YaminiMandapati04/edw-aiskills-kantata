@@ -1,0 +1,1020 @@
+{
+  "_comment": "Row map for the Accel-KKR CFO Chronograph template for Yes Energy (assets/chronograph_template.xlsx). Every labelled row of the sheet is listed here as '<Section> | <Label>' and says where its monthly values come from. Sources: pl / bs / cf = the Finance view lines (a name is read at the deepest COA or cash-flow level it exists), arr / customers = ARR_ANALYTICS bridge categories, bookings / pipeline = GTM_ANALYTICS metrics, arr_rate = a ratio of two ARR_ANALYTICS LTM amounts (derived, labelled), customer_rate = a ratio of ARR_ANALYTICS CUSTOMER_BRIDGE LTM counts (derived, labelled), revolver = one METRIC of FINANCE_ANALYTICS REVOLVER (Finance-maintained; a stored 0 is written as 0, a missing month is refused), 'limit_checks' refuse a month where one row exceeds another, 'level' pins a line to one COA level and a list of lines takes them all, 'negate' writes the row with the view's sign reversed, because the template enters costs, outflows, churn, downsell and lost customers as positive amounts and subtracts them in its formulas (the build's calculations and gates use the view's sign), 'blank_if_all_zero' leaves a metric blank when the view returns 0 in every month, null = no view carries it (the row is left blank, never 0). 'remainder_of' fills a group's Other row with the line total less the rows named. 'formula' rows keep the template's own formula, copied to every month. 'chain' rows take the first month from the source and keep the template's link to the prior month after it. The build refuses any labelled row that is not listed, and any template whose hash differs from template_sha256.",
+  "template_sha256": "dabcd6a46359d25ebdf1dc4282fa2e2575db00cb12d09a0b74bd111d69f1f984",
+  "sheet": "2025 Template Corrected",
+  "output_sheet": "Accel-KKR Chronograph",
+  "output_title": "Accel-KKR Portfolio Company Monthly Reporting",
+  "display": {
+    "_comment": "Amounts are held in USD thousands: the build divides every amount it writes by 1,000 and the formulas calculate in thousands; the gates multiply back and compare in dollars. Counts (Customer Bridge, Headcount), percentages and ratios are not divided.",
+    "scale": "thousands",
+    "not_scaled_sections": [
+      "Customer Bridge",
+      "Headcount"
+    ]
+  },
+  "label_col": 6,
+  "first_month_col": 7,
+  "header_label": "P&L Items",
+  "sections": [
+    "Profit & Loss",
+    "Balance Sheet",
+    "Cash Flow Statement",
+    "ARR Bridge",
+    "Customer Bridge",
+    "Bookings",
+    "Pipeline",
+    "Headcount",
+    "Liquidity",
+    "Payments Metrics"
+  ],
+  "arr_categories": [
+    "Beginning ARR",
+    "New",
+    "Churn",
+    "Upsell",
+    "Downsell",
+    "FX",
+    "Ending ARR",
+    "Gross Dollar Retention",
+    "Net Dollar Retention"
+  ],
+  "cf_unlabelled": [],
+  "sign_watch": {
+    "Profit & Loss | Depreciation & Amortization": {
+      "expect": "positive",
+      "explain": "D&A is entered positive as a cost in the template; a negative amount means the view books it as income. Confirm its sign with the view owner"
+    }
+  },
+  "rows": {
+    "Profit & Loss | SaaS - Subscription": {
+      "src": "pl",
+      "line": "SaaS - Subscription"
+    },
+    "Profit & Loss | Maintenance & Support": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Recurring Transactional": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Recurring Services": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Other": {
+      "src": "pl",
+      "remainder_of": "Recurring Revenue",
+      "less": [
+        "SaaS - Subscription",
+        "Maintenance & Support",
+        "Recurring Transactional",
+        "Recurring Services"
+      ]
+    },
+    "Profit & Loss | Recurring Revenue": {
+      "src": "formula"
+    },
+    "Profit & Loss | Perpetual License": {
+      "src": "pl",
+      "line": "Perpetual License"
+    },
+    "Profit & Loss | Term License": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | One-time Services": {
+      "src": "pl",
+      "line": "One-time Services"
+    },
+    "Profit & Loss | Hardware": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Other non-recurring": {
+      "src": "pl",
+      "remainder_of": "Non-Recurring Revenue",
+      "less": [
+        "Perpetual License",
+        "Term License",
+        "One-time Services",
+        "Hardware"
+      ]
+    },
+    "Profit & Loss | Non-Recurring Revenue": {
+      "src": "formula"
+    },
+    "Profit & Loss | Total Revenue": {
+      "src": "formula"
+    },
+    "Profit & Loss | Recurring COGs": {
+      "src": "pl",
+      "negate": true,
+      "line": "Recurring COGs"
+    },
+    "Profit & Loss | Non-Recurring COGs": {
+      "src": "pl",
+      "negate": true,
+      "line": "Non-Recurring COGs"
+    },
+    "Profit & Loss | Total Cost of Sales": {
+      "src": "formula"
+    },
+    "Profit & Loss | Recurring Gross Profit": {
+      "src": "formula"
+    },
+    "Profit & Loss | Non-recurring Gross Profit": {
+      "src": "formula"
+    },
+    "Profit & Loss | Gross Profit": {
+      "src": "formula"
+    },
+    "Profit & Loss | Sales Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Sales Expense"
+    },
+    "Profit & Loss | Marketing Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Marketing Expense"
+    },
+    "Profit & Loss | Other S&M Expense": {
+      "src": "pl",
+      "negate": true,
+      "remainder_of": "Fully loaded S&M Expense",
+      "remainder_level": 4,
+      "less": [
+        "Sales Expense",
+        "Marketing Expense",
+        "Capitalized commissions"
+      ]
+    },
+    "Profit & Loss | S&M Expense": {
+      "src": "formula",
+      "override": "=SUM(G33:G35)",
+      "why": "the template's SUM stops at Marketing Expense and leaves out its own Other S&M Expense row"
+    },
+    "Profit & Loss | Capitalized commissions": {
+      "src": "pl",
+      "line": "Capitalized Commissions",
+      "note": "FINANCE_ANALYTICS Capitalized Commissions (COA L5 under Fully loaded S&M Expense).",
+      "negate": true
+    },
+    "Profit & Loss | Fully loaded S&M Expense": {
+      "src": "formula"
+    },
+    "Profit & Loss | Engineering Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Engineering Expense"
+    },
+    "Profit & Loss | Product Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Product Expense"
+    },
+    "Profit & Loss | Other R&D Expense": {
+      "src": "pl",
+      "negate": true,
+      "remainder_of": "Fully loaded R&D",
+      "remainder_level": 4,
+      "less": [
+        "Engineering Expense",
+        "Product Expense",
+        "Capitalized software"
+      ]
+    },
+    "Profit & Loss | R&D": {
+      "src": "formula",
+      "override": "=SUM(G39:G41)",
+      "why": "the template's SUM stops at Product Expense and leaves out its own Other R&D Expense row"
+    },
+    "Profit & Loss | Capitalized software": {
+      "src": "pl",
+      "line": "Capitalized Software",
+      "note": "FINANCE_ANALYTICS Capitalized Software (COA L5 under Fully loaded R&D).",
+      "negate": true
+    },
+    "Profit & Loss | Fully loaded R&D": {
+      "src": "formula"
+    },
+    "Profit & Loss | HR Department": {
+      "src": "pl",
+      "negate": true,
+      "line": "HR Department"
+    },
+    "Profit & Loss | IT Department": {
+      "src": "pl",
+      "negate": true,
+      "line": "IT Department"
+    },
+    "Profit & Loss | Finance Department": {
+      "src": "pl",
+      "negate": true,
+      "line": "Finance Department"
+    },
+    "Profit & Loss | Legal Department": {
+      "src": "pl",
+      "negate": true,
+      "line": "Legal Department"
+    },
+    "Profit & Loss | Rent/Lease Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Rent/Lease Expense"
+    },
+    "Profit & Loss | Other G&A Spend": {
+      "src": "pl",
+      "negate": true,
+      "remainder_of": "Total G&A",
+      "remainder_level": 4,
+      "less": [
+        "HR Department",
+        "IT Department",
+        "Finance Department",
+        "Legal Department",
+        "Rent/Lease Expense"
+      ]
+    },
+    "Profit & Loss | Total G&A": {
+      "src": "formula"
+    },
+    "Profit & Loss | Total Operating Expenses": {
+      "src": "formula"
+    },
+    "Profit & Loss | Adjusted EBITDA": {
+      "src": "formula"
+    },
+    "Profit & Loss | Unrealized Synergies": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Realized Synergies": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Strategic Investments / Other": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | PF Adjusted EBITDA": {
+      "src": "formula"
+    },
+    "Profit & Loss | Depreciation & Amortization": {
+      "src": "pl",
+      "negate": true,
+      "line": "Depreciation & Amortization",
+      "level": 4
+    },
+    "Profit & Loss | Interest Income": {
+      "src": "pl",
+      "line": "Interest Income",
+      "level": 4
+    },
+    "Profit & Loss | Interest Expense": {
+      "src": "pl",
+      "negate": true,
+      "line": "Interest Expense"
+    },
+    "Profit & Loss | Reversal of Capitalized Portions": {
+      "src": "pl",
+      "line": "Reversal of Capitalized Portions",
+      "level": 4
+    },
+    "Profit & Loss | Income Taxes": {
+      "src": "pl",
+      "negate": true,
+      "line": "Income Taxes"
+    },
+    "Profit & Loss | Transition & Integration Costs": {
+      "src": "pl",
+      "negate": true,
+      "line": "Transition & Integration Costs"
+    },
+    "Profit & Loss | Transaction Costs": {
+      "src": "pl",
+      "negate": true,
+      "line": "Transaction Costs"
+    },
+    "Profit & Loss | Severance": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Profit & Loss | Management & AKKR / ACG Fees": {
+      "src": "pl",
+      "negate": true,
+      "line": "Management & AKKR / ACG Fees"
+    },
+    "Profit & Loss | Other Items": {
+      "src": "pl",
+      "negate": true,
+      "remainder_of": "Other Non-Operating Income & Expense",
+      "less": [
+        "Transition & Integration Costs",
+        "Transaction Costs",
+        "Severance",
+        "Management & AKKR / ACG Fees"
+      ]
+    },
+    "Profit & Loss | Other Non-Operating Income & Expense": {
+      "src": "formula"
+    },
+    "Profit & Loss | Total Non-Operating Income (Expense)": {
+      "src": "formula"
+    },
+    "Profit & Loss | Net Income": {
+      "src": "formula"
+    },
+    "Profit & Loss | Hosting/Cloud Costs (COGs)": {
+      "src": "hosting",
+      "bucket": "COGS",
+      "negate": true,
+      "memo": true,
+      "note": "FINANCE_ANALYTICS hosting accounts 61200, 61300, 61400, 61500, 61502, 61600, 61700 (config/scope.json hosting_accounts) where COA L3 = Cost of Sales; TOTAL_MTD, no adjustment-type filter (Pro Forma Actuals included).",
+      "why": "memo row below Net Income: the template's =Recurring COGs x 0.9 was a placeholder; it now reads the hosting accounts Yes Energy finance defined"
+    },
+    "Profit & Loss | Hosting/Cloud Costs (R&D)": {
+      "src": "hosting",
+      "bucket": "R&D",
+      "negate": true,
+      "memo": true,
+      "note": "FINANCE_ANALYTICS hosting accounts 61200, 61300, 61400, 61500, 61502, 61600, 61700 where COA L3 is not Cost of Sales: Operating Expenses (G&A, S&M, R&D) and the 61200 Transition & Integration Costs row under Non-Operating; TOTAL_MTD, Pro Forma Actuals included.",
+      "why": "memo row below Net Income: reads the non-COGS lines of the hosting accounts Yes Energy finance defined"
+    },
+    "Balance Sheet | Cash & Equivalents": {
+      "src": "bs",
+      "line": "Cash & Equivalents",
+      "level": 3
+    },
+    "Balance Sheet | Accounts Receivable": {
+      "src": "bs",
+      "line": "Accounts Receivable",
+      "level": 3
+    },
+    "Balance Sheet | Other Current Assets": {
+      "src": "bs",
+      "line": "Other Current Assets",
+      "level": 3
+    },
+    "Balance Sheet | Current Assets": {
+      "src": "formula"
+    },
+    "Balance Sheet | Net Fixed Assets": {
+      "src": "bs",
+      "line": "Net Fixed Assets",
+      "level": 3,
+      "note": "FINANCE_ANALYTICS Net Fixed Assets (COA L3): Fixed Assets less Accumulated Depreciation."
+    },
+    "Balance Sheet | Net Capitalized Software": {
+      "src": null,
+      "reason": "Yes Energy's COA mapping has no capitalised-software line at L1-L3; Capitalized Software Development stays in Other Non-Current Assets (its COA L3)"
+    },
+    "Balance Sheet | Goodwill & Intangibles": {
+      "src": "bs",
+      "line": "Goodwill & Intangibles",
+      "level": 3
+    },
+    "Balance Sheet | Other Non-Current Assets": {
+      "src": "bs",
+      "line": "Other Non-Current Assets",
+      "level": 3,
+      "note": "FINANCE_ANALYTICS Other Non-Current Assets (COA L3), including Capitalized Software Development."
+    },
+    "Balance Sheet | Total Non-Current Assets": {
+      "src": "formula"
+    },
+    "Balance Sheet | Total Assets": {
+      "src": "formula"
+    },
+    "Balance Sheet | Accounts Payable": {
+      "src": "bs",
+      "line": "Accounts Payable",
+      "level": 4
+    },
+    "Balance Sheet | Accrued Expenses": {
+      "src": "bs",
+      "line": "Accrued Expenses",
+      "level": 4
+    },
+    "Balance Sheet | Deferred Revenue": {
+      "src": "bs",
+      "line": "Deferred Revenue",
+      "level": 4
+    },
+    "Balance Sheet | Short Term Debt": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Balance Sheet | Accrued Interest": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Balance Sheet | Other Current Liabilities": {
+      "src": "bs",
+      "remainder_of": "Current Liabilities",
+      "remainder_level": 3,
+      "less": [
+        "Accounts Payable",
+        "Accrued Expenses",
+        "Deferred Revenue"
+      ]
+    },
+    "Balance Sheet | Current Liabilities": {
+      "src": "formula"
+    },
+    "Balance Sheet | Senior Debt": {
+      "src": "bs",
+      "line": "Senior Debt",
+      "level": 4
+    },
+    "Balance Sheet | Subordinate Debt": {
+      "src": null,
+      "reason": "not in Yes Energy's chart of accounts (FINANCE_ANALYTICS)"
+    },
+    "Balance Sheet | Other Long-Term Liabilities": {
+      "src": "bs",
+      "remainder_of": "Non-Current Liabilities",
+      "remainder_level": 3,
+      "less": [
+        "Senior Debt"
+      ]
+    },
+    "Balance Sheet | Total Non-Current Liabilities": {
+      "src": "formula"
+    },
+    "Balance Sheet | Total Liabilities": {
+      "src": "formula"
+    },
+    "Balance Sheet | Total Equity": {
+      "src": "bs",
+      "line": "Equity",
+      "level": 2,
+      "note": "FINANCE_ANALYTICS Equity (COA L2): shareholder's equity, retained earnings, cumulative translation adjustment and current-year net income, including the group-level rows -20001 / -20002 / -20003."
+    },
+    "Balance Sheet | Total L & S/H Equity": {
+      "src": "formula"
+    },
+    "Balance Sheet | A = L + E": {
+      "src": "formula"
+    },
+    "Balance Sheet | Total Debt": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Net Income": {
+      "src": "cf",
+      "line": "Net Income",
+      "note": "FINANCE_ANALYTICS cash flow mart: Cash from Operations > Income from Operations > Net Income. Using it keeps the cash flow tied to the view's ending cash.",
+      "why": "the template linked this row to P&L Net Income; reading the cash flow mart's own Net Income keeps the cash tie-out inside one source"
+    },
+    "Cash Flow Statement | Total Non-Cash Items": {
+      "src": "cf",
+      "remainder_of": "Income from Operations",
+      "remainder_level": 2,
+      "less_lines": [
+        "Net Income"
+      ],
+      "note": "FINANCE_ANALYTICS Total Non-Cash Items (Income from Operations less Net Income): D&A and other non-cash add-backs."
+    },
+    "Cash Flow Statement | Income from Operations": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Change in Working Capital": {
+      "src": "cf",
+      "negate": true,
+      "line": "Change in Working Capital"
+    },
+    "Cash Flow Statement | Cash from Operations": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Capital Expenditures": {
+      "src": "cf",
+      "negate": true,
+      "line": "Capital Expenditures"
+    },
+    "Cash Flow Statement | Capitalized R&D": {
+      "src": null,
+      "reason": "the FINANCE_ANALYTICS cash flow has no capitalised R&D line"
+    },
+    "Cash Flow Statement | Other cash from investing": {
+      "src": "cf",
+      "negate": true,
+      "remainder_of": "Cash from Investing",
+      "less": [
+        "Capital Expenditures",
+        "Capitalized R&D"
+      ]
+    },
+    "Cash Flow Statement | Cash from Investing": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Cash Before Financing": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Change in Equity": {
+      "src": "cf",
+      "line": "Change in Equity"
+    },
+    "Cash Flow Statement | Revolver": {
+      "src": null,
+      "reason": "the cash flow carries no revolver line; see Liquidity for size and drawn amount"
+    },
+    "Cash Flow Statement | Change in Debt": {
+      "src": "cf",
+      "line": "Change in Debt"
+    },
+    "Cash Flow Statement | Other Items": {
+      "src": "cf",
+      "remainder_of": "Cash from Financing",
+      "less": [
+        "Change in Equity",
+        "Revolver",
+        "Change in Debt"
+      ]
+    },
+    "Cash Flow Statement | Cash from Financing": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | Net Cash Flow": {
+      "src": "formula"
+    },
+    "Cash Flow Statement | FX Change": {
+      "src": "cf",
+      "line": "FX Change",
+      "level": 1,
+      "note": "FINANCE_ANALYTICS FX Change > Effect of Exchange Rate on Cash."
+    },
+    "Cash Flow Statement | Beginning Cash": {
+      "src": "cf_label",
+      "line": "Beginning Cash",
+      "chain": true
+    },
+    "Cash Flow Statement | Ending Cash": {
+      "src": "formula",
+      "override": "=G136+G137+G138",
+      "why": "the template's Ending Cash adds Net Cash Flow and Beginning Cash but leaves out its own FX Change row"
+    },
+    "ARR Bridge | Beginning ARR": {
+      "src": "arr",
+      "category": "Beginning ARR",
+      "chain": true
+    },
+    "ARR Bridge | (-) Churn/Lost": {
+      "src": "arr",
+      "negate": true,
+      "category": "Churn"
+    },
+    "ARR Bridge | (-) Downsell/Contraction (Subscription)": {
+      "src": "arr",
+      "negate": true,
+      "category": "Downsell",
+      "note": "ARR_ANALYTICS Downsell: ARR decrease from customers that stayed positive (all contraction; the bridge does not split subscription and transactional)."
+    },
+    "ARR Bridge | Gross Dollar Retention": {
+      "src": "formula"
+    },
+    "ARR Bridge | (+) Upsell": {
+      "src": "arr",
+      "category": "Upsell"
+    },
+    "ARR Bridge | (-) Downsell/Contraction (Transactional)": {
+      "src": "arr",
+      "negate": true,
+      "category": "FX",
+      "note": "ARR_ANALYTICS FX: the currency movement on non-USD ARR, written as -1 x FX (the template subtracts this row in Net Dollar Retention). Yes Energy's bridge has no transactional downsell; this row carries FX so Ending ARR ties to the view.",
+      "why": "the template has no FX row: FX is carried here so the bridge foots to the view's Ending ARR"
+    },
+    "ARR Bridge | (+) Cross-Sell": {
+      "src": null,
+      "reason": "Yes Energy's ARR bridge has only New, Churn, Upsell, Downsell and FX; cross-sell are in Upsell"
+    },
+    "ARR Bridge | (+) Price Increase": {
+      "src": null,
+      "reason": "Yes Energy's ARR bridge has only New, Churn, Upsell, Downsell and FX; price increases are in Upsell"
+    },
+    "ARR Bridge | Net Dollar Retention": {
+      "src": "formula"
+    },
+    "ARR Bridge | (+) New": {
+      "src": "arr",
+      "category": "New"
+    },
+    "ARR Bridge | Ending ARR": {
+      "src": "formula"
+    },
+    "ARR Bridge | Churn Only Gross Retention %": {
+      "src": "arr_rate",
+      "numerator": [
+        "Beginning ARR",
+        "Churn"
+      ],
+      "denominator": "Beginning ARR",
+      "format": "0.0%",
+      "why": "LTM: (opening ARR 12 months back less LTM churn) / opening ARR"
+    },
+    "ARR Bridge | Gross Retention %": {
+      "src": "arr_rate",
+      "numerator": [
+        "Gross Dollar Retention"
+      ],
+      "denominator": "Beginning ARR",
+      "format": "0.0%",
+      "why": "LTM: the view's LTM Gross Dollar Retention / opening ARR 12 months back"
+    },
+    "ARR Bridge | Net Retention %": {
+      "src": "arr_rate",
+      "numerator": [
+        "Net Dollar Retention"
+      ],
+      "denominator": "Beginning ARR",
+      "format": "0.0%",
+      "why": "LTM: the view's LTM Net Dollar Retention / opening ARR 12 months back"
+    },
+    "ARR Bridge | Renewal Rate %": {
+      "src": "customer_rate",
+      "numerator": [
+        "Beginning Customers",
+        "Lost Customers"
+      ],
+      "denominator": "Beginning Customers",
+      "format": "0.0%",
+      "why": "LTM: (customers 12 months back less LTM lost customers) / customers 12 months back"
+    },
+    "Customer Bridge | Beginning Customers": {
+      "src": "customers",
+      "category": "Beginning Customers",
+      "note": "LTM: measured against the customer count 12 months earlier (ARR_ANALYTICS CUSTOMER_BRIDGE.TOTAL_LTM). Beginning Customers is the count 12 months back, so it does not equal the prior month's Ending."
+    },
+    "Customer Bridge | (-) Lost": {
+      "src": "customers",
+      "negate": true,
+      "category": "Lost Customers",
+      "note": "LTM: measured against the customer count 12 months earlier (ARR_ANALYTICS CUSTOMER_BRIDGE.TOTAL_LTM). Beginning Customers is the count 12 months back, so it does not equal the prior month's Ending."
+    },
+    "Customer Bridge | (+) New": {
+      "src": "customers",
+      "category": "New Customers",
+      "note": "LTM: measured against the customer count 12 months earlier (ARR_ANALYTICS CUSTOMER_BRIDGE.TOTAL_LTM). Beginning Customers is the count 12 months back, so it does not equal the prior month's Ending."
+    },
+    "Customer Bridge | Ending Customers": {
+      "src": "formula",
+      "note": "LTM: measured against the customer count 12 months earlier (ARR_ANALYTICS CUSTOMER_BRIDGE.TOTAL_LTM). Beginning Customers is the count 12 months back, so it does not equal the prior month's Ending."
+    },
+    "Bookings | Bookings - ARR (New)": {
+      "src": "bookings",
+      "metric": "ARR_NEW_MTD",
+      "note": "GTM_ANALYTICS ARR_NEW_MTD: won recurring bookings from new business.",
+      "why": "the template linked this row to the ARR bridge's New (ARR going live, not signings); it now reads GTM bookings"
+    },
+    "Bookings | Bookings - ARR (Upsell)": {
+      "src": "bookings",
+      "metric": "ARR_UPSELL_MTD",
+      "note": "GTM_ANALYTICS ARR_UPSELL_MTD: won recurring bookings from existing customers.",
+      "why": "the template linked this row to the ARR bridge's Upsell + Cross-Sell; it now reads GTM bookings"
+    },
+    "Bookings | Bookings - Recurring Services": {
+      "src": null,
+      "reason": "GTM_ANALYTICS splits all recurring bookings into ARR New and ARR Upsell (RECURRING_BOOKINGS_MTD = ARR_NEW_MTD + ARR_UPSELL_MTD); there is no separate recurring-services booking",
+      "why": "the template held a placeholder 0"
+    },
+    "Bookings | Recurring Bookings (ARR)": {
+      "src": "formula"
+    },
+    "Bookings | Non-Recurring Bookings": {
+      "src": "bookings",
+      "metric": "NON_RECURRING_BOOKINGS_MTD"
+    },
+    "Bookings | Total Bookings (ARR + SR)": {
+      "src": "formula"
+    },
+    "Pipeline | Unweighted Pipeline": {
+      "src": "pipeline",
+      "metric": "OPEN_PIPELINE_VALUE_MTD",
+      "note": "GTM_ANALYTICS OPEN_PIPELINE_VALUE_MTD: ACV (USD) of opportunities in stages 01 - ENGAGE to 06 - NEGOTIATE with ACV > 0, as they stood at each month-end."
+    },
+    "Pipeline | Weighted Pipeline": {
+      "src": "pipeline",
+      "metric": "WEIGHTED_PIPELINE_VALUE_MTD",
+      "blank_if_all_zero": true,
+      "zero_reason": "the view returns 0 when no stage win probabilities are set in its stage mapping"
+    },
+    "Pipeline | Quarterly Pipeline Coverage Ratio": {
+      "src": null,
+      "reason": "GTM_ANALYTICS has no pipeline coverage metric (no pipeline target)"
+    },
+    "Headcount | COGS": {
+      "src": "heading"
+    },
+    "Headcount | S&M": {
+      "src": "heading"
+    },
+    "Headcount | R&D": {
+      "src": "heading"
+    },
+    "Headcount | G&A": {
+      "src": "heading"
+    },
+    "Headcount | Customer Success - Non-Quota": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Customer Support": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Operations": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Professional Services": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | COGS HC Total": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Marketing": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Customer Success - Quota": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Sales - Quota": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Sales - Non-Quota": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | S&M HC Total": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Development": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Product Management": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | R&D HC Total": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Accounting & Finance": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Administrative": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Executive / General Manager": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Human Resources": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | IT": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Legal": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Other": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | G&A HC Total": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Beginning FTEs": {
+      "src": null,
+      "chain": true,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | (+) New Hires": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | (-) Voluntary Turnover": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | (-) Involuntary Turnover": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | Ending FTEs": {
+      "src": "formula",
+      "inputs_blank": true
+    },
+    "Headcount | (-) Regrettable Turnover": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Headcount | (-) Non-regrettable Turnover": {
+      "src": null,
+      "reason": "headcount is not in any of the three views"
+    },
+    "Liquidity | $ Revolver Size": {
+      "src": "revolver",
+      "metric": "Revolver Size",
+      "note": "FINANCE_ANALYTICS REVOLVER, METRIC = Revolver Size (maintained by Finance in PROD_DB.MANUAL.REVOLVER)."
+    },
+    "Liquidity | $ Drawn Revolver": {
+      "src": "revolver",
+      "metric": "Drawn Revolver",
+      "note": "FINANCE_ANALYTICS REVOLVER, METRIC = Drawn Revolver (maintained by Finance in PROD_DB.MANUAL.REVOLVER)."
+    },
+    "Liquidity | $ Unused Revolver": {
+      "src": "formula"
+    },
+    "Liquidity | Principal Payments": {
+      "src": "revolver",
+      "metric": "Principal Payments",
+      "note": "FINANCE_ANALYTICS REVOLVER, METRIC = Principal Payments (maintained by Finance in PROD_DB.MANUAL.REVOLVER), as Finance stores it."
+    },
+    "Payments Metrics | Gross Transaction Volume": {
+      "src": null,
+      "reason": "payments metrics are not in any of the three views"
+    },
+    "Payments Metrics | Gross Transactional Revenue": {
+      "src": null,
+      "reason": "payments metrics are not in any of the three views"
+    },
+    "Payments Metrics | Processing Costs": {
+      "src": null,
+      "reason": "payments metrics are not in any of the three views"
+    },
+    "Payments Metrics | Net Transactional Revenue": {
+      "src": "formula",
+      "inputs_blank": true
+    },
+    "Payments Metrics | % Gross take rate": {
+      "src": "formula",
+      "inputs_blank": true
+    },
+    "Payments Metrics | % Net take Rate": {
+      "src": "formula",
+      "inputs_blank": true
+    }
+  },
+  "checks": [
+    {
+      "row": "Profit & Loss | Total Revenue",
+      "against": [
+        "pl_governed",
+        "REVENUE_MTD"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Profit & Loss | Adjusted EBITDA",
+      "against": [
+        "pl_governed",
+        "ADJUSTED_EBITDA_MTD"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Profit & Loss | Net Income",
+      "against": [
+        "pl_governed",
+        "NET_INCOME_MTD"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Balance Sheet | A = L + E",
+      "against": [
+        "zero"
+      ],
+      "tolerance": 1.0,
+      "explain": "total assets less total liabilities and equity must be 0 in every month (the FINANCE_ANALYTICS balance sheet balances)"
+    },
+    {
+      "row": "Balance Sheet | Cash & Equivalents",
+      "against": [
+        "cf_label",
+        "Ending Cash"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Cash Flow Statement | Net Income",
+      "against": [
+        "pl_governed",
+        "NET_INCOME_MTD"
+      ],
+      "tolerance": 1.0,
+      "blocking": false,
+      "explain": "cash-flow Net Income vs P&L Net Income: they should agree; any difference is reported for review"
+    },
+    {
+      "row": "Cash Flow Statement | Cash Before Financing",
+      "against": [
+        "cf_label",
+        "Cash before Financing"
+      ],
+      "tolerance": 1.0,
+      "explain": "the sheet's Cash from Operations plus Cash from Investing must equal the view's Cash before Financing"
+    },
+    {
+      "row": "Cash Flow Statement | Beginning Cash",
+      "against": [
+        "cf_label",
+        "Beginning Cash"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Cash Flow Statement | Ending Cash",
+      "against": [
+        "cf_label",
+        "Ending Cash"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "ARR Bridge | Beginning ARR",
+      "against": [
+        "arr",
+        "Beginning ARR"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "ARR Bridge | Gross Dollar Retention",
+      "against": [
+        "arr",
+        "Gross Dollar Retention"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "ARR Bridge | Net Dollar Retention",
+      "against": [
+        "arr",
+        "Net Dollar Retention",
+        "FX"
+      ],
+      "tolerance": 1.0,
+      "explain": "the sheet's NDR includes FX (carried in the Transactional downsell row), so it is checked against the view's Net Dollar Retention + FX"
+    },
+    {
+      "row": "ARR Bridge | Ending ARR",
+      "against": [
+        "arr",
+        "Ending ARR"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Customer Bridge | Ending Customers",
+      "against": [
+        "customers",
+        "Ending Customers"
+      ],
+      "tolerance": 0.0
+    },
+    {
+      "row": "Bookings | Recurring Bookings (ARR)",
+      "against": [
+        "bookings",
+        "RECURRING_BOOKINGS_MTD"
+      ],
+      "tolerance": 1.0
+    },
+    {
+      "row": "Bookings | Total Bookings (ARR + SR)",
+      "against": [
+        "bookings",
+        "TOTAL_BOOKINGS_MTD"
+      ],
+      "tolerance": 1.0
+    }
+  ],
+  "revolver_metrics": [
+    "Revolver Size",
+    "Drawn Revolver",
+    "Principal Payments"
+  ],
+  "limit_checks": [
+    {
+      "row": "Liquidity | $ Drawn Revolver",
+      "not_above": "Liquidity | $ Revolver Size",
+      "explain": "Drawn Revolver must not exceed Revolver Size in any month"
+    }
+  ]
+}

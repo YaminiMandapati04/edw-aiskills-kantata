@@ -1,0 +1,43 @@
+{
+  "database": "PROD_DB",
+  "schema": "SEMANTIC_VIEWS",
+  "exclude_subsidiaries": [],
+  "exclude_subsidiaries_reason": {},
+  "rollup_keys": [
+    "-1",
+    "-2",
+    "-3",
+    "-4",
+    "-5",
+    "-6",
+    "-8",
+    "-9",
+    "-10",
+    "-11",
+    "-12",
+    "-13",
+    "-14",
+    "-15",
+    "-19",
+    "-100",
+    "-1000"
+  ],
+  "rollup_keys_note": "Roll-up and ratio rows the view carries as separate accounts (Gross Profit, Gross Profit %, Total Revenue, Adjusted EBITDA, Adjusted EBITDA %, Net Income, Net Income %, PF Adjusted EBITDA, Total Debt). Other negative keys are real rows and stay in: -8001 / -8002 / -8003 (Capitalised Software, Capitalised Commissions, Reversal of Capitalised Portions, P&L), -20001 / -20002 / -20003 (retained earnings, cumulative translation adjustment, current-year net income, balance sheet), and the cash-flow labels -10 / -11 / -12 / -27, which the cf query keeps on purpose.",
+  "pl_l6_kept_under_l5": [
+    "S&M Expense",
+    "R&D"
+  ],
+  "pl_l6_note": "Yes Energy's COA carries L6 only under S&M Expense (Sales / Marketing Expense) and R&D (Engineering / Product Expense). The pl query keeps L6 there, where the template needs it, and sums everything else to L5, which keeps the 24-month result well inside the connector's row limit.",
+  "subsidiary_scope_note": "The exclusion applies to FINANCE_ANALYTICS (P&L, balance sheet, cash flow) and to GTM bookings. ARR_ANALYTICS and GTM pipeline have no subsidiary dimension: they cover every entity as stored.",
+  "tolerance_usd": 1.0,
+  "hosting_accounts": [
+    "61200",
+    "61300",
+    "61400",
+    "61500",
+    "61502",
+    "61600",
+    "61700"
+  ],
+  "hosting_note": "Hosting / cloud accounts (ACCOUNT.ACCOUNT_NUMBER) set by Yes Energy finance: 61200 Cloud, 61300 Managed Hosting, 61400 Server Equipment, 61500 Server Software, 61502 DR/HA Solution, 61600 Database Monitoring/Admin, 61700 DS Hard/Software Fees. Lines with COA L3 = Cost of Sales fill Hosting/Cloud Costs (COGs); every other line (Operating Expenses and the 61200 Transition & Integration Costs row under Non-Operating) fills Hosting/Cloud Costs (R&D). No adjustment-type filter: Pro Forma Actuals are included."
+}
