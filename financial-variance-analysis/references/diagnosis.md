@@ -83,10 +83,6 @@ Counts: findings ≥ 1; exactly three conclusions with distinct roles; decision 
 
 `readout.summary` (the written executive summary; full rules in `specialists/readout.md`): exactly 4 `bullets`, each with a `role` in the order `headline` → `why` → `trend` → `attention` (what it means is written inside them), the page lines (heads + texts) at most 220 words; a bullet naming a business-context driver the data model does not carry lists it in `unverified[]`, and the attention bullet's `data_needed[]` names the data that would confirm it. Plus 2 or 3 `decisions` (questions).
 
-### Manual adjustments
-
-Each lens carries `adjustments` (`types[]` with `actual.rev` / `actual.ebitda` / `actual.ni` and components, `total_ebitda_impact`, `ebitda_excluding_adjustments`). When an adjustment type moves the headline or a driver materially, the executive summary or the finding names it, with figures registered from those paths. Capitalisation (`Adjustment for Capitalized expenses`: Capitalised Software, Capitalised Commissions, Reversal of Capitalised Portions) is an `observed_fact` about accounting treatment. It is never the basis of a performance inference. Pro forma (`Pro Forma Actuals`, `Pro Forma Adjustments`) is named as pro forma, never as organic movement.
-
 ### GL memo evidence
 
 When the payload carries memos (`payload.memos.available`), every lens has `memo_evidence`: for net income, each driver and each material account, the memo **themes** (a memo with month names, dates and document numbers removed, so "Sep26 Vendor Accruals" and "Aug26 Vendor Accruals" are one theme) and the additive memo **categories** (accruals and reversals for an earlier month, payroll, bonus, accruals for the period, interest, reclassifications, ... , no memo), each with actual, comparator and variance in the lens's convention, adding up to the driver or account. `payload.memos.run_rate` holds the same for the three months the outlook's run-rate averages, and `payload.memos.one_offs` the memos behind each one-off in the register. Read them with `finance_brief.py ... memos [--id]`; `driver`, `account` and `summary_pack` carry them too.

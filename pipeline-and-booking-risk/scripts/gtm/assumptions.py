@@ -27,14 +27,14 @@ def build(payload, inp, consts):
         ("Headline pipeline", f"PIPELINE_OVERVIEW snapshot at {pl.get('as_of')}" + (" (same date as bookings)" if pl.get("as_of") == meta["as_of"]["month_end"] else " (differs from bookings: see data checks)")),
         ("Deal lists, stage age, past due", f"current state at {pl.get('deals_as_of') or pl.get('as_of')}: the view keeps no deal-level history"),
         ("Fiscal year", (meta.get("fiscal") or {}).get("rule", "") + f"; this page is in {(meta.get('fiscal') or {}).get('year')}, quarter {(meta.get('fiscal') or {}).get('quarter')}"),
-        ("Windows", "Month, fiscal Quarter to date (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec; the fiscal year is the calendar year) and Last twelve months, each against the same months one quarter earlier (Oct against Jul); fiscal Year to date (from 1 January) has no prior-quarter equivalent and is not offered as a lens. Trend lines, open pipeline a year earlier and the rest-of-year scenario (to 31 December) stay on the prior year")])
+        ("Windows", "Month, fiscal Quarter to date (Feb–Apr, May–Jul, Aug–Oct, Nov–Jan) and Last twelve months, each against the same months one quarter earlier (Oct against Jul); fiscal Year to date (from 1 February) has no prior-quarter equivalent and is not offered as a lens. Trend lines, open pipeline a year earlier and the rest-of-year scenario (to 31 January) stay on the prior year")])
     g("Tie-outs to the governed view", [
         ("Booking lines vs BOOKINGS_OVERVIEW", "every month's TOTAL_BOOKINGS_MTD, to $1 or 0.1%; fiscal quarter, year to date and the last twelve months are built from those months (the mart's QTD, YTD and LTM columns are not used)"),
         ("Lost deals vs LOST_ACV_USD", "last twelve months, to $1 or 0.2%"),
         ("Bridges", "prior quarter + every step = this period, to the cent, by measure, product and subsidiary")])
     g("Pipeline values", [
-        ("Weighted pipeline", "open opportunity line ACV × Salesforce probability ÷ 100 (WEIGHTED_OPEN_PIPELINE_ACV / WEIGHTED_PIPELINE_VALUE), over open stages Stage 0 to Invest; pipeline created, won and lost ACV are unweighted"),
-        ("Close quarters", "weighted pipeline grouped by the fiscal (calendar) quarter of its close date"),
+        ("Open pipeline", "unweighted ACV (blended ARR) of opportunities in a pipeline stage (01 - ENGAGE to 06 - NEGOTIATE) with ACV above 0"),
+        ("Close quarters", "open pipeline grouped by the fiscal quarter of its close date"),
         ("Targets and coverage", "none: the view holds no pipeline or bookings target, so nothing is read against a target")])
     st, hv, nc = rk.get("stuck") or {}, rk.get("high_value") or {}, rk.get("not_closing") or {}
     g("Pipeline risk", [
@@ -51,8 +51,8 @@ def build(payload, inp, consts):
         ("Win rate by value", cs["rule"] if cs else "won ÷ (won + lost) ACV"),
         ("Small samples", f"fewer than {consts['MIN_CLOSED_FOR_RATE']} closed deals: shown, not read as a finding")])
     g("Bookings detail", [
-        ("Recurring bookings", "Salesforce closed-won opportunity lines, on the close date; split by BOOKING_METRIC into ARR (New) (New Customer) and ARR (Upsell) (Upgrade, Renewal, Downgrade)"),
-        ("Non-recurring bookings", "NetSuite one-time services revenue from the GL, by subsidiary (Power Settlements, ENELYTIX), on the period end date; product One Time Services, no account or opportunity"),
+        ("Recurring bookings", "Salesforce won New Sales and Seat Expansion opportunities at blended ARR, on the close date; split into new sales and seat expansion by opportunity type"),
+        ("Non-recurring bookings", "NetSuite non-recurring revenue from the income statement, by subsidiary, on the period end date; no account, product or opportunity"),
         ("Customers and deals", "recurring bookings only (non-recurring revenue has no account); a deal is one booked opportunity"),
         ("Re-papering", "same customer, measure and absolute amount with opposite sign in the window: paired, kept out of top deals, shown net on the customer"),
         ("Organic view", "excludes subsidiaries with no prior-quarter bookings in the window; acquisition status is management input"),

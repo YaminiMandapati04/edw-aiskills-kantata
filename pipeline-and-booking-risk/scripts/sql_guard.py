@@ -36,7 +36,7 @@ FORBIDDEN = {
 
 
 # A table-qualified metric whose name ends in a window other than MTD: REVENUE_YTD, TOTAL_PY_LTM, TOTAL_BUDGET_QTD,
-# TOTAL_BOOKINGS_PYYTD, WEIGHTED_PIPELINE_VALUE_QTD ... (an alias such as REVENUE_FYTD is not table-qualified and passes).
+# TOTAL_BOOKINGS_PYYTD, OPEN_PIPELINE_VALUE_QTD ... (an alias such as REVENUE_FYTD is not table-qualified and passes).
 WINDOW_METRIC = re.compile(r"\.\s*([A-Za-z_][A-Za-z0-9_]*?_(?:PY_|BUDGET_|PY)?(?:QTD|YTD|LTM))\b", re.IGNORECASE)
 
 def strip_literals_and_comments(sql: str) -> str:

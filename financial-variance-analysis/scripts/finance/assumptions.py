@@ -60,11 +60,9 @@ def build(model, frame, outlook, qc, one_offs, mode, as_of_label, build_date, da
        ("One-offs", f"{len(O.get('one_offs_excluded', []))} flagged month(s) taken out of the run-rate (listed in the run-rate drawer)"),
        ("Full-year budget", "in the extract, so each rule is set against it" if O.get("fy_budget_available") else "not in the extract: the remaining months cannot be set against budget"),
        ("If current gaps continue", "each driver's remaining months at the rule against its budget for those months; the operating drivers add up to the bridge's remaining-months step")])
-    adj = {n: d["months"] for n, d in (getattr(frame, "adjustments", None) or {}).items() if d.get("months")}
+    adj = {n: m for n, m in (getattr(frame, "adjustments", None) or {}).items() if m}
     g("Scope",
-      [("Adjustments", ("; ".join(f"{n}: {m[0]['period']} to {m[-1]['period']} ({len(m)} months)" for n, m in adj.items())
-                        + ". Pro forma actuals and adjustments, and the capitalisation of software and commissions (charged inside Adjusted EBITDA, reversed below it), "
-                        "are included as the finance system reports them") if adj else "none in the extract"),
+      [("Group adjustments", ("; ".join(f"{n}: {m[0]} to {m[-1]} ({len(m)} months)" for n, m in adj.items()) + ". Kept below EBITDA as the finance system stores them, inside net income") if adj else "none in the extract"),
        ("Subsidiaries", f"{len(frame.subs)} in scope" + (f"; excluded: {', '.join(frame.excluded)}" if frame.excluded else "") + (f"; filtered to {frame.scope_subsidiary}" if frame.scope_subsidiary else "; consolidated as stored, eliminations not documented")),
        ("Fiscal year", (lambda fc: (f"starts 1 {['January','February','March','April','May','June','July','August','September','October','November','December'][fc['start_month'] - 1]}, "
                                      f"named by the year it ends in; quarter and year to date follow it ({fc['source']})") if fc else "as the extract's YEAR / QUARTER")(getattr(frame, "fiscal", None))),

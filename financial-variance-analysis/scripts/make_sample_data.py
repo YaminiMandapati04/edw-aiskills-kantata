@@ -22,7 +22,7 @@ from openpyxl import Workbook
 SEED = 20261103
 LATEST = dt.date(2026, 10, 31)                       # latest closed month-end in the samples
 MONTHS = [dt.date(2024 + (i // 12), i % 12 + 1, 1) for i in range(34)]   # 2024-01 .. 2026-10
-FY_START = 1                                                               # Yes Energy's fiscal year is the calendar year (January to December)
+FY_START = 2                                                               # Kantata's fiscal year runs February to January
 
 
 def month_end(d):
@@ -105,7 +105,7 @@ def finance(rng):
 
     period_rows = []
     for i, m in enumerate(MONTHS):
-        fy, fq = (m.year + (1 if FY_START > 1 and m.month >= FY_START else 0), (m.month - FY_START) % 12 // 3 + 1)   # fiscal year named by the year it ends in
+        fy, fq = (m.year + (m.month >= FY_START), (m.month - FY_START) % 12 // 3 + 1)   # fiscal year from February, named by its end
         period_rows.append([i + 1, m.strftime("%b %Y"), m, month_end(m), fy, f"Q{fq}", m.month])
     subs = [(1, "Acme US"), (2, "Acme UK")]
     share = {1: 0.62, 2: 0.38}

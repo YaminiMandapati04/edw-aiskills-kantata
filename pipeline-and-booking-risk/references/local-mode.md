@@ -45,7 +45,7 @@ One sheet per table, **row 1 = headers**, sheet and header names as below (case 
 |---|---|
 | `BOOKING_LINES` (`BOOKING_DATE`, `BOOKING_METRIC`, `BOOKING_SOURCE`, `OPPORTUNITY_TYPE`, `PRODUCT`, `OPPORTUNITY_ID`, `ACCOUNT_NAME`, `SUBSIDIARY_NAME`, `BOOKING_ACV_USD`), `OPPORTUNITIES` (`OPPORTUNITY_ID`, `OPPORTUNITY_NAME`, `ACCOUNT_NAME`, `OWNER_NAME`, `PRODUCT`, `OPPORTUNITY_SOURCE`, `OPPORTUNITY_TYPE`, `STATUS`, `STAGE_NAME`, `STAGE_ORDER`, `CLOSE_DATE`, `CREATED_DATE`, `PIPELINE_CREATION_DATE`, `ACV_USD`, optional `DATA_REFRESHED_AT`, `REGION`) | `OPPORTUNITY_STAGE_HISTORY` (`OPPORTUNITY_ID`, `STAGE_RUN_NO`, `STAGE_NAME`, `STATUS`, `STAGE_START_DATE`, `STAGE_END_DATE`, `CLOSE_DATE` at the end of the run, `IS_CURRENT_STAGE`, `OWNER_NAME`) |
 
-Booking lines follow the view: recurring lines have `BOOKING_METRIC IN ('ARR (New)', 'ARR (Upsell)')`, an `OPPORTUNITY_TYPE` (New Customer or Upgrade / Renewal / Downgrade), an account, product and opportunity, and no subsidiary; non-recurring lines have `BOOKING_METRIC = 'Non-Recurring'`, a subsidiary and nothing else. There is no target sheet: the view holds no pipeline target.
+Booking lines follow the view: recurring lines have `BOOKING_METRIC = 'Recurring Services'`, an `OPPORTUNITY_TYPE` (New Sales or Seat Expansion), an account, product and opportunity, and no subsidiary; non-recurring lines have `BOOKING_METRIC = 'Non-Recurring'`, a subsidiary and nothing else. There is no target sheet: the view holds no pipeline target.
 
 Dates load as ISO text (`YYYY-MM-DD`), TRUE/FALSE as 1/0. Compare dates with string comparison on ISO text.
 
@@ -56,19 +56,19 @@ A real export from the warehouse can be used as the workbook as long as it follo
 | Governed (Snowflake) | Local (workbook) |
 |---|---|
 | `SEMANTIC_VIEW(...)` applies metric logic | Plain SQL; you apply the formulas in §4 |
-| Pre-aggregated marts (`BOOKINGS_OVERVIEW`, `PIPELINE_OVERVIEW`) with window twins | Not in the workbook: windows are computed from lines (`BOOKING_LINES`, `OPPORTUNITIES`) with date filters, on the fiscal year (1 January to 31 December) |
-| Built-in open filter and weighting on opportunity metrics (`NOT IS_CLOSED`, `WEIGHTED_OPEN_PIPELINE_ACV`) | You apply it: `STATUS = 'Open'`, and weighted ACV = `ACV_USD * PROBABILITY / 100` |
+| Pre-aggregated marts (`BOOKINGS_OVERVIEW`, `PIPELINE_OVERVIEW`) with window twins | Not in the workbook: windows are computed from lines (`BOOKING_LINES`, `OPPORTUNITIES`) with date filters, on the fiscal year (1 February to 31 January) |
+| Built-in pipeline filter on opportunity metrics (`IS_ACTIVE_PIPELINE`) | You apply it: `STATUS = 'Open'`, a pipeline stage (`STAGE_ORDER` 2 to 7, 01 - ENGAGE to 06 - NEGOTIATE) and `ACV_USD > 0` |
 | Dimension joins defined in the view | Names are already on the line sheets (`ACCOUNT_NAME`, `OWNER_NAME`, `PRODUCT`) |
 | Currency: USD (`*_USD`) | Whatever the workbook holds; state it from the README or ask |
 | Access control, row-level security | None. Don't upload client data to a place the user wouldn't normally share it |
 
-The grain rules still apply: one window per question, weighted pipeline at one date, bookings and created pipeline over a range, never summing ratios or distinct counts across groups. Pipeline values are weighted (ACV × probability).
+The grain rules still apply: one window per question, open pipeline at one date, bookings and created pipeline over a range, never summing ratios or distinct counts across groups. Pipeline values are unweighted.
 
 ## 4. Metric formulas in SQL
 
 | Governed metric | Local SQL |
 |---|---|
-| `TOTAL_BOOKINGS_<w>` and parts | `SUM(BOOKING_ACV_USD)` on `BOOKING_LINES` over the window's `BOOKING_DATE` range (QTD and YTD on the fiscal year: YTD from 1 January); new ARR = `BOOKING_METRIC IN ('ARR (New)', 'ARR (Upsell)') AND OPPORTUNITY_TYPE = 'New Customer'`, upsell ARR = `… AND OPPORTUNITY_TYPE = 'Upgrade / Renewal / Downgrade'`, non-recurring = `'Non-Recurring'`; recurring = new ARR + upsell ARR; total = all three |
+| `TOTAL_BOOKINGS_<w>` and parts | `SUM(BOOKING_ACV_USD)` on `BOOKING_LINES` over the window's `BOOKING_DATE` range (QTD and YTD on the fiscal year: YTD from 1 February); new sales = `BOOKING_METRIC = 'Recurring Services' AND OPPORTUNITY_TYPE = 'New Sales'`, seat expansion = `… AND OPPORTUNITY_TYPE = 'Seat Expansion'`, non-recurring = `'Non-Recurring'`; recurring = new sales + seat expansion; total = all three |
 | Average deal value | recurring `SUM(BOOKING_ACV_USD)` ÷ `COUNT(DISTINCT OPPORTUNITY_ID)` over the window |
 | `OPEN_PIPELINE_ACV`, `OPEN_OPPORTUNITIES` | `SUM(ACV_USD)`, `COUNT(DISTINCT OPPORTUNITY_ID)` where `STATUS = 'Open' AND STAGE_ORDER BETWEEN 2 AND 7 AND ACV_USD > 0` |
 | `PIPELINE_CREATED_ACV`, `OPPORTUNITIES_CREATED` | `SUM(ACV_USD)`, `COUNT(DISTINCT OPPORTUNITY_ID)` over a `PIPELINE_CREATION_DATE` range |
@@ -81,18 +81,17 @@ The grain rules still apply: one window per question, weighted pipeline at one d
 These run on the shipped sample workbook (SQLite dialect). Replace literals with real members after probing.
 
 ```sql
--- Bookings fiscal YTD (FY2026: Jan-Oct 2026) vs the same months of FY2025, by measure
+-- Bookings fiscal YTD (FY2027: Feb-Oct 2026) vs the same months of FY2026, by measure
 SELECT BOOKING_METRIC, COALESCE(OPPORTUNITY_TYPE, '') AS type,
-  ROUND(SUM(CASE WHEN BOOKING_DATE BETWEEN '2026-01-01' AND '2026-10-31' THEN BOOKING_ACV_USD END),0) AS fytd,
-  ROUND(SUM(CASE WHEN BOOKING_DATE BETWEEN '2025-01-01' AND '2025-10-31' THEN BOOKING_ACV_USD END),0) AS py_fytd
+  ROUND(SUM(CASE WHEN BOOKING_DATE BETWEEN '2026-02-01' AND '2026-10-31' THEN BOOKING_ACV_USD END),0) AS fytd,
+  ROUND(SUM(CASE WHEN BOOKING_DATE BETWEEN '2025-02-01' AND '2025-10-31' THEN BOOKING_ACV_USD END),0) AS py_fytd
 FROM BOOKING_LINES GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
 ```sql
--- Weighted pipeline by stage (ACV x probability; Closed Lost is not open)
-SELECT STAGE_ORDER, STAGE_NAME, COUNT(DISTINCT OPPORTUNITY_ID) AS opps, ROUND(SUM(ACV_USD * PROBABILITY / 100.0),0) AS weighted_acv,
-       ROUND(SUM(ACV_USD),0) AS unweighted_acv
-FROM OPPORTUNITIES WHERE STATUS = 'Open' AND ACV_USD <> 0 GROUP BY 1, 2 ORDER BY 1;
+-- Open pipeline by stage (unweighted; Closed Lost is not open)
+SELECT STAGE_ORDER, STAGE_NAME, COUNT(DISTINCT OPPORTUNITY_ID) AS opps, ROUND(SUM(ACV_USD),0) AS acv
+FROM OPPORTUNITIES WHERE STATUS = 'Open' AND STAGE_ORDER BETWEEN 2 AND 7 AND ACV_USD > 0 GROUP BY 1, 2 ORDER BY 1;
 ```
 
 ```sql
@@ -104,19 +103,19 @@ FROM OPPORTUNITY_STAGE_HISTORY h WHERE h.IS_CURRENT_STAGE = 1 AND h.STATUS = 'Op
 ```
 
 ```sql
--- Weighted pipeline by fiscal close quarter (fiscal year = calendar year: Q1 Jan-Mar ... Q4 Oct-Dec); no target, no ratio
-SELECT 'FY' || strftime('%Y', CLOSE_DATE)
-       || '-Q' || ((CAST(strftime('%m', CLOSE_DATE) AS INTEGER) - 1) / 3 + 1) AS fiscal_quarter,
-       COUNT(DISTINCT OPPORTUNITY_ID) AS opps, ROUND(SUM(ACV_USD * PROBABILITY / 100.0),0) AS weighted_pipeline
-FROM OPPORTUNITIES WHERE STATUS = 'Open' AND ACV_USD <> 0 GROUP BY 1 ORDER BY 1;
+-- Open pipeline by fiscal close quarter (Q1 Feb-Apr ... Q4 Nov-Jan, FY named by the year it ends); no target, no ratio
+SELECT 'FY' || (CAST(strftime('%Y', CLOSE_DATE) AS INTEGER) + (CAST(strftime('%m', CLOSE_DATE) AS INTEGER) >= 2))
+       || '-Q' || (((CAST(strftime('%m', CLOSE_DATE) AS INTEGER) + 10) % 12) / 3 + 1) AS fiscal_quarter,
+       COUNT(DISTINCT OPPORTUNITY_ID) AS opps, ROUND(SUM(ACV_USD),0) AS open_pipeline
+FROM OPPORTUNITIES WHERE STATUS = 'Open' AND STAGE_ORDER BETWEEN 2 AND 7 AND ACV_USD > 0 GROUP BY 1 ORDER BY 1;
 ```
 
 ```sql
--- Win rate for fiscal year to date (FY2026)
+-- Win rate for fiscal year to date (FY2027)
 SELECT ROUND(1.0 * SUM(STATUS = 'Closed Won') / NULLIF(SUM(STATUS IN ('Closed Won','Closed Lost')), 0), 4) AS win_rate,
        SUM(STATUS = 'Closed Won') AS won, SUM(STATUS = 'Closed Lost') AS lost
 FROM OPPORTUNITIES
-WHERE CLOSE_DATE BETWEEN '2026-01-01' AND '2026-10-31' AND STATUS IN ('Closed Won','Closed Lost');
+WHERE CLOSE_DATE BETWEEN '2026-02-01' AND '2026-10-31' AND STATUS IN ('Closed Won','Closed Lost');
 ```
 
 ## 6. Labelling rules

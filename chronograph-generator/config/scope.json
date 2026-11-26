@@ -3,41 +3,14 @@
   "schema": "SEMANTIC_VIEWS",
   "exclude_subsidiaries": [],
   "exclude_subsidiaries_reason": {},
-  "rollup_keys": [
-    "-1",
-    "-2",
-    "-3",
-    "-4",
-    "-5",
-    "-6",
-    "-8",
-    "-9",
-    "-10",
-    "-11",
-    "-12",
-    "-13",
-    "-14",
-    "-15",
-    "-19",
-    "-100",
-    "-1000"
-  ],
-  "rollup_keys_note": "Roll-up and ratio rows the view carries as separate accounts (Gross Profit, Gross Profit %, Total Revenue, Adjusted EBITDA, Adjusted EBITDA %, Net Income, Net Income %, PF Adjusted EBITDA, Total Debt). Other negative keys are real rows and stay in: -8001 / -8002 / -8003 (Capitalised Software, Capitalised Commissions, Reversal of Capitalised Portions, P&L), -20001 / -20002 / -20003 (retained earnings, cumulative translation adjustment, current-year net income, balance sheet), and the cash-flow labels -10 / -11 / -12 / -27, which the cf query keeps on purpose.",
-  "pl_l6_kept_under_l5": [
-    "S&M Expense",
-    "R&D"
-  ],
-  "pl_l6_note": "Yes Energy's COA carries L6 only under S&M Expense (Sales / Marketing Expense) and R&D (Engineering / Product Expense). The pl query keeps L6 there, where the template needs it, and sums everything else to L5, which keeps the 24-month result well inside the connector's row limit.",
-  "subsidiary_scope_note": "The exclusion applies to FINANCE_ANALYTICS (P&L, balance sheet, cash flow) and to GTM bookings. ARR_ANALYTICS and GTM pipeline have no subsidiary dimension: they cover every entity as stored.",
-  "tolerance_usd": 1.0,
-  "hosting_accounts": [
-    "61200",
-    "61300",
-    "61400",
-    "61500",
-    "61502",
-    "61600",
-    "61700"
-  ],
-  "hosting_note": "Hosting / cloud accounts (ACCOUNT.ACCOUNT_NUMBER) set by Yes Energy finance: 61200 Cloud, 61300 Managed Hosting, 61400 Server Equipment, 61500 Server Software, 61502 DR/HA Solution, 61600 Database Monitoring/Admin, 61700 DS Hard/Software Fees. Lines with COA L3 = Cost of Sales fill Hosting/Cloud Costs (COGs); every other line (Operating Expenses and the 61200 Transition & Integration Costs row under Non-Operating) fills Hosting/Cloud Costs (R&D). No adjustment-type filter: Pro Forma Actuals are included."
+  "rollup_keys": ["-1", "-3", "-4", "-5", "-8", "-9", "-10", "-11", "-12", "-15", "-19", "-100", "-1000"],
+  "rollup_keys_note": "Other negative keys are real rows and stay in: -10000 (group-level Amortization adjustment, P&L), -20001 / -20002 / -20003 (retained earnings, translation reserve, profit after tax, balance sheet).",
+  "pl_l6_kept_under_l5": ["S&M Expense", "R&D"],
+  "pl_l6_note": "Kantata's COA L6 is account-level detail (about 240 lines a month, which the connector cuts off at 24 months). The pl query keeps L6 only under these L5 lines, where the template needs it (Sales / Marketing, Engineering / Product), and sums the rest to L5.",
+  "subsidiary_scope_note": "The exclusion applies to FINANCE_ANALYTICS (P&L, balance sheet, cash flow) and to GTM bookings. ARR_ANALYTICS, GTM pipeline and the FINANCE_ANALYTICS revolver (Finance's manual REVOLVER table, related to no other table) have no subsidiary dimension: they cover every entity as stored.",
+  "exclude_accounts": ["0010Z000023uvjkQAA", "0013r00002nUO7SAAW", "0013r00002nUOBtAAO", "0013r00002fqSchAAE", "0013r00002fpJz4AAE"],
+  "exclude_accounts_note": "Kantata's five internal test accounts, excluded from ARR, customers, recurring bookings and pipeline in every run. Matched by 18-character Salesforce account ID only, never by name: real customers whose names contain 'test' stay in. IDs the user names in a request are added on top. FINANCE_ANALYTICS has no Salesforce account, so the P&L, balance sheet, cash flow and revolver still include them.",
+  "revolver_drawn_account": "280360",
+  "revolver_drawn_note": "Drawn Revolver = the FINANCE_ANALYTICS balance sheet month-end balance (ENDING_BALANCE_CONVERTED) of ACCOUNT_NUMBER 280360 (Alliance Bernstein Revolver, under Senior Debt). Validated 2026-11-24: one account and entity, every month Oct-24 to Oct-26, converted = unconverted (USD), 18.16mn to Aug-25 then 17.21mn. The other revolver accounts (280370 Sixth Street Revolver, 280903 PIK Interest Revolver) are 0 today and not included.",
+  "tolerance_usd": 1.0
 }

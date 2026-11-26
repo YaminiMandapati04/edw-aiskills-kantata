@@ -1,6 +1,6 @@
 # Dashboard contract: the GTM diagnostic renderer
 
-> **Status: live, with the AI review.** Renderer **1.11.0** (`artifacts/gtm_analytics/gtm_analytics.js`, assembled by `scripts/gtm/render.py` from governed extracts via `build_gtm_dashboard.py` or a local workbook via `build_sample_dashboard.py`; 1.9.0 is the Yes Energy build: no targets, coverage or weighted pipeline, fiscal quarters) reads payload contract **sda.gtm-analysis/2.0.0** and, when present, an admitted diagnosis of contract **sda.gtm-diagnosis/1.0.0**. It refuses anything else. The whole payload is embedded in the HTML as the audit record; what is on screen is what is in the payload. Field names below are the target shape; the build may refine them and must update this file when it does.
+> **Status: live, with the AI review.** Renderer **1.11.0** (`artifacts/gtm_analytics/gtm_analytics.js`, assembled by `scripts/gtm/render.py` from governed extracts via `build_gtm_dashboard.py` or a local workbook via `build_sample_dashboard.py`; 1.9.0 is the Kantata build: no targets, coverage or weighted pipeline, fiscal quarters) reads payload contract **sda.gtm-analysis/2.0.0** and, when present, an admitted diagnosis of contract **sda.gtm-diagnosis/1.0.0**. It refuses anything else. The whole payload is embedded in the HTML as the audit record; what is on screen is what is in the payload. Field names below are the target shape; the build may refine them and must update this file when it does.
 
 ## Contents
 1. Assets
@@ -44,9 +44,9 @@ contract_version          "sda.gtm-analysis/2.0.0"
 meta                      title, view, data_mode, currency, as_of{label, month_end, quarter, fiscal_year}, primary_lens,
                           fiscal{start_month: 2, year, year_start, quarter, rule}, scope{products, subsidiaries, filtered_to, note},
                           months_of_history, generated_at, materiality, sources, renderer_version, window_labels, basis_labels,
-                          data_refreshed_at. Quarters are fiscal (1 January to 31 December; labels FY2026-Q3).
+                          data_refreshed_at. Quarters are fiscal (1 February to 31 January; labels FY2027-Q3).
 series                    monthly bookings (actual, py) by measure, product and subsidiary; monthly pipeline created (actual, py)
-drivers[]                 id (m:arr_new "New ARR" | m:arr_upsell "Upsell ARR" | m:non_recurring "Non-recurring" | p:<slug> | s:<slug>),
+drivers[]                 id (m:arr_new "New sales" | m:arr_upsell "Seat expansion" | m:non_recurring "Non-recurring" | p:<slug> | s:<slug>),
                           label, dimension (measure | product | subsidiary)
 signals{<driver id>}      runrate{months, mean, min, max, stdev, reference, eligible, reason}, tests[]{id, label, state, evidence, note},
                           fired[], persistence_hint, confidence
@@ -64,7 +64,7 @@ lenses{<WINDOW>_<basis>}  WINDOW in MTD, QTD, YTD, LTM; basis pq: bookings again
                           story{lead, lines[]}, headline{text, slots}
 conversion                for each window: win_rate, (prior quarter in lenses[].conversion_cmp), won{acv, count}, lost{acv, count}, by_product[], by_source[],
                           loss_reasons[] (empty: the view has no loss reason)
-pipeline                  point in time at the analysis date, weighted (ACV × probability): open, open_count, avg_value (each with py);
+pipeline                  point in time at the analysis date, unweighted: open, open_count, avg_value (each with py);
                           by_close_quarter[]{id, quarter, open, count, late_stage} (fiscal close quarters, current and next three);
                           in_quarter{quarter, open, count} (the next quarter when the analysis month is a quarter end); earlier_quarters_open;
                           by_stage_quarter[]; stage_days[]; risk{past_due{value, count, share}, aged{value, count, share}, deals[]};
@@ -77,7 +77,7 @@ analysis_hash             SHA-256 of everything above; the diagnosis binds to it
 diagnoses (render only)   the admitted reviews keyed by view id, each with admitted_at and warnings; review {required, admitted, missing}
 ```
 
-Identities the engine enforces and the validator re-checks: Total = Recurring + Non-recurring and Recurring = New ARR + Upsell ARR for actual and comparator in every lens; every bridge reconciles (start + Σ steps = end, to the cent); drivers in one dimension sum to the total; booking lines tie to `BOOKINGS_OVERVIEW` `TOTAL_BOOKINGS_MTD` for every month (QC `mart_tie_out`). QC `as_of_complete` (INFO) records a step back from a month NetSuite has not closed.
+Identities the engine enforces and the validator re-checks: Total = Recurring + Non-recurring and Recurring = New sales + Seat expansion for actual and comparator in every lens; every bridge reconciles (start + Σ steps = end, to the cent); drivers in one dimension sum to the total; booking lines tie to `BOOKINGS_OVERVIEW` `TOTAL_BOOKINGS_MTD` for every month (QC `mart_tie_out`). QC `as_of_complete` (INFO) records a step back from a month NetSuite has not closed.
 
 Paths follow `lenses[QTD_pq].drivers.measure[m:arr_new].variance`: `[x]` selects a dict key or the list element whose `id` is `x`.
 
@@ -85,9 +85,9 @@ Paths follow `lenses[QTD_pq].drivers.measure[m:arr_new].variance`: `[x]` selects
 
 | Tab | Question in the tab bar | Regions (`id`) | Reads |
 |---|---|---|---|
-| Pipeline (first; the page opens on it) | Will the pipeline turn into bookings, and what needs a decision? | `pipe-exec`, `kpis-pipe`, `pipe-risk`, `pipe-asks` | Executive summary: 3 to 5 bullets from `lenses[].pipeline_insights` (velocity lead, then high-value exposure, not closing, stuck, conversion). Side cards: days to win (`lenses[].velocity`), high-value deals at risk as a share of weighted pipeline (`risk.high_value.flagged`), not closing (`risk.not_closing`), stuck (`risk.stuck`). Pipeline at a glance: open, closing this quarter (`pipeline.in_quarter`), pipeline created, win rate, lost. Chart: where the pipeline is at risk by stage (`risk.at_risk.by_stage`). Decisions: `lenses[].pipeline_actions` (high value at risk, not closing, stuck only). Deal lists only in drawers |
+| Pipeline (first; the page opens on it) | Will the pipeline turn into bookings, and what needs a decision? | `pipe-exec`, `kpis-pipe`, `pipe-risk`, `pipe-asks` | Executive summary: 3 to 5 bullets from `lenses[].pipeline_insights` (velocity lead, then high-value exposure, not closing, stuck, conversion). Side cards: days to win (`lenses[].velocity`), high-value deals at risk as a share of open pipeline (`risk.high_value.flagged`), not closing (`risk.not_closing`), stuck (`risk.stuck`). Pipeline at a glance: open, closing this quarter (`pipeline.in_quarter`), pipeline created, win rate, lost. Chart: where the pipeline is at risk by stage (`risk.at_risk.by_stage`). Decisions: `lenses[].pipeline_actions` (high value at risk, not closing, stuck only). Deal lists only in drawers |
 | Bookings | Where do bookings stand, why, and what needs a decision? | `book-exec`, `kpis`, `book-movers`, `book-asks` | Executive summary from `lenses[].insights` (lead, persistence, concentration, products, quality, size). Side cards: recurring share, average deal value, top two and top five customers (shares of recurring bookings), largest deal. Bookings at a glance in order of build-up. Chart: what moved bookings by measure / product / subsidiary (drivers). Decisions: `lenses[].actions` (concentration, product decline, recurring-share drop). The bridge opens from the Total bookings drawer |
-| Outlook | What could the pipeline deliver in the quarters ahead? | `out-tiles`, `out-close`, `out-scenario`, `out-wvb`, `out-gaps` | Tiles: closing this quarter, scenario range, pipeline created. Weighted pipeline by fiscal close quarter (`pipeline.by_close_quarter`, no ratio), won vs recurring bookings, the scenario range, pipeline created by month, and what the data cannot answer yet (`capabilities.renewals`, `discounts`, `retention`). No tables |
+| Outlook | What could the pipeline deliver in the quarters ahead? | `out-tiles`, `out-close`, `out-scenario`, `out-wvb`, `out-gaps` | Tiles: closing this quarter, scenario range, pipeline created. Open pipeline by fiscal close quarter (`pipeline.by_close_quarter`, no ratio), won vs recurring bookings, the scenario range, pipeline created by month, and what the data cannot answer yet (`capabilities.renewals`, `discounts`, `retention`). No tables |
 | Glossary | | `glossary` | collapsible, tab-aware table: Direction, Figures, Where the numbers come from, one group per tab, Detail panels, Publication state |
 | Drawer | | `dh`, `dbody` | kpi, driver (and bridge step), customer and deal list, quarter, stage, risk tier, action, finding, qc; charts first, text last |
 
@@ -95,7 +95,7 @@ Paths follow `lenses[QTD_pq].drivers.measure[m:arr_new].variance`: `[x]` selects
 
 - Window (Month, Quarter to date, Year to date, Last twelve months) switches between the precomputed `<WINDOW>_pq` lenses; nothing is recomputed. Year to date is shown disabled, with the lens's `reason` as its tooltip. The page opens on Quarter to date (fiscal). Compare shows "vs Prior quarter" only: the view has no plan or target. A chip in the header shows the fiscal year and quarter.
 - An admitted review applies to its view: the executive summaries, decisions and Bookings "What this means" change with the window and fall back to the engine reading where the view has no review; the Pipeline and Outlook readings (snapshot and projection) show on every view. The data badge and footer say "AI reviewed" or "This view not AI reviewed" (`references/diagnosis.md` §7).
-- Summary has only small charts (the diverging movers bars, the side-card gauges). The bookings bridge opens from the Total bookings drawer; weighted pipeline by close quarter only on Outlook.
+- Summary has only small charts (the diverging movers bars, the side-card gauges). The bookings bridge opens from the Total bookings drawer; open pipeline by close quarter only on Outlook.
 - No fourth tab. A data-quality problem surfaces through the existing components: the QC badge and drawer, caveats beside the numbers they qualify.
 - Progressive disclosure: executive summary → KPI strip → movers and decisions → drawer. A reader never needs a drawer to learn the direction of bookings, the three largest drivers or what is dated to close next quarter.
 - Customer names appear in the summary only where an insight names the customers behind a movement, and in Drivers panels and drawers, capped at the top ten.
@@ -116,6 +116,6 @@ Tags carry state, never inference: direction (`favourable`, `unfavourable`, `in 
 3. Run `python scripts/test_gtm_pipeline.py --keep --out work/test` and open the rendered files; the headless DOM check must pass.
 4. Keep the allowlist in §2 true. When the payload gains content, the question is which existing component expresses it, not which panel to add.
 
-**1.9.0** (Yes Energy) removes `pipeline.coverage`, `pipeline.weighted`, `pipeline.created_vs_target`, `pipeline.view_coverage_ratio`, `meta.coverage_floor` and `meta.view_schema`; adds `pipeline.by_close_quarter`, `pipeline.in_quarter`, `pipeline.earlier_quarters_open`, `meta.fiscal`, `meta.as_of.fiscal_year` and `rest_of_year.fiscal_year`. QC drops `forward_targets` and `coverage_window` and adds `as_of_complete`. Measures read New ARR, Upsell ARR and Non-recurring; orders read as deals. The contract id is unchanged.
+**1.9.0** (Kantata) removes `pipeline.coverage`, `pipeline.weighted`, `pipeline.created_vs_target`, `pipeline.view_coverage_ratio`, `meta.coverage_floor` and `meta.view_schema`; adds `pipeline.by_close_quarter`, `pipeline.in_quarter`, `pipeline.earlier_quarters_open`, `meta.fiscal`, `meta.as_of.fiscal_year` and `rest_of_year.fiscal_year`. QC drops `forward_targets` and `coverage_window` and adds `as_of_complete`. Measures read New sales, Seat expansion and Non-recurring; orders read as deals. The contract id is unchanged.
 
 **1.5.0** adds `short` to every insight (the one line on the page, at most 15 words, no figures) and to every action (the first question clause, at most 12 words); the page shows the short line and opens the full `text` / `question` above the drill-down when the bullet or decision is clicked. Payload additions only; contract unchanged.

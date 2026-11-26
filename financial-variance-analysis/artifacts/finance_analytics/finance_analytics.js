@@ -147,8 +147,8 @@ function renderHeader() {
   $('#pageTitle').textContent = `Finance review · ${MONTH_YEAR}`;
   $('#scope').innerHTML = `<span class="chip">Scope <b>${esc(META.scope.label || META.scope.filtered_to || 'All subsidiaries')}</b></span><span class="chip">${esc(String(META.currency).split(' ')[0])}</span><span class="chip">${META.months_of_history} months of history</span>`;
   const curW = L().window, curB = L().basis;
-  $('#lens').innerHTML = `<div class="lrow"><span class="lab">Window</span><span class="seg" id="segWin">${['MTD', 'QTD', 'YTD', 'LTM'].map(w => `<button data-w="${w}" class="${w === curW ? 'on' : ''}" ${P.lenses[`${w}_${curB}`].available ? '' : 'disabled'}>${esc(META.window_labels[w])}</button>`).join('')}</span></div>
-    <div class="lrow"><span class="lab">Compare</span><span class="seg" id="segBas">${['py', 'budget'].map(b => `<button data-b="${b}" class="${b === curB ? 'on' : ''}">vs ${esc(META.basis_labels[b])}</button>`).join('')}</span></div>`;
+  $('#lens').innerHTML = `<div class="lrow" id="rowWin"${S.tab === 'outlook' ? ' hidden' : ''}><span class="lab">Window</span><span class="seg" id="segWin">${['MTD', 'QTD', 'YTD', 'LTM'].map(w => `<button data-w="${w}" class="${w === curW ? 'on' : ''}" ${P.lenses[`${w}_${curB}`].available ? '' : 'disabled'}>${esc(META.window_labels[w])}</button>`).join('')}</span></div>
+    <div class="lrow" id="rowBas"${S.tab === 'outlook' ? ' hidden' : ''}><span class="lab">Compare</span><span class="seg" id="segBas">${['py', 'budget'].map(b => `<button data-b="${b}" class="${b === curB ? 'on' : ''}">vs ${esc(META.basis_labels[b])}</button>`).join('')}</span></div>`;
   $('#segWin').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) setLens(`${b.dataset.w}_${curB}`); };
   $('#segBas').onclick = e => { const b = e.target.closest('button'); if (b) setLens(`${curW}_${b.dataset.b}`); };
   const qc = P.qc, sb = $('#stateBadge');
@@ -158,7 +158,7 @@ function renderHeader() {
   $('#foot').innerHTML = `<span>Source: ${esc(META.sources.join(', '))} · ${esc(META.scope.label || '')}</span><span>Generated ${esc(String(META.generated_at).slice(0, 10))}</span><span>${D() ? 'AI reviewed' : 'This view not AI reviewed'}</span>`;
 }
 const TABQ = { summary: 'Where do we stand, why, and what needs a decision?', drivers: 'What moved the result, and what drives it?', outlook: 'Where does the year land?' };
-function setTab(t) { S.tab = t; document.querySelectorAll('nav.tabs button[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === t)); document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t)); $('#tabQ').textContent = TABQ[t]; try { history.replaceState(null, '', '#' + t); } catch (e) { /* sandboxed srcdoc frame (claude.ai preview): no URL to update */ } renderGlossary(); }
+function setTab(t) { S.tab = t; document.querySelectorAll('nav.tabs button[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === t)); document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t)); $('#tabQ').textContent = TABQ[t]; ['#rowWin', '#rowBas'].forEach(r => { const el = $(r); if (el) el.hidden = t === 'outlook'; }); try { history.replaceState(null, '', '#' + t); } catch (e) { /* sandboxed srcdoc frame (claude.ai preview): no URL to update */ } renderGlossary(); }
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
 function setLens(id) { if (!P.lenses[id] || !P.lenses[id].available) return; S.lens = id; S.bridgeSel = null; closeDrawer(); renderAll(); }
 /* glossary: every label on the page, grouped; "This tab" shows the shared groups plus the open tab's own labels,
@@ -455,11 +455,11 @@ const cmtList = (id, items) => `<ul class="cmt" id="${id}">${items.filter(Boolea
 /* the admitted AI review, shown inside the summary panel it belongs to (Drivers: what is lasting; Outlook: forecast assumptions) */
 /* What this means, on every view: Drivers shows the admitted review's structural reading for the view when there is one,
    otherwise the engine's own pattern readings for that window and comparison; the Outlook projection is one fiscal-year
-   figure whatever the view, so its reviewed assumptions show on every view (the opening view's review first) */
+   figure whatever the view, so it shows the same reviewed assumptions on every view (the opening view's review first,
+   never the selected view's), which is why the Window and Compare buttons are hidden on the Outlook tab */
 const meaningDrivers = () => { const rv = readout().structural_conclusions || []; if (rv.length) return rv;
   return (L().patterns || []).filter(x => x.fired && x.reading).slice(0, 3).map(x => ({ text: x.reading })); };
-const meaningOutlook = () => { const own = readout().forecast_assumptions || []; if (own.length) return own;
-  const ids = [META.primary_lens.id, ...Object.keys(DIAGS)], d = ids.map(k => DIAGS[k]).find(x => x && ((x.readout || {}).forecast_assumptions || []).length);
+const meaningOutlook = () => { const ids = [META.primary_lens.id, ...Object.keys(DIAGS)], d = ids.map(k => DIAGS[k]).find(x => x && ((x.readout || {}).forecast_assumptions || []).length);
   return d ? d.readout.forecast_assumptions : [{ text: 'A straight-line projection of the run-rate rule picked: no seasonality, pipeline or management view is included, and nothing is added to the forecast until an owner accepts it.' }]; };
 const aiReview = (id, title, items, tagHtml = '') => (items || []).length ? `<div class="aird" id="${id}"><div class="airh"><span>${esc(title)}</span>${tagHtml}</div><ul class="say">${items.map(s => `<li>${esc(clean(s.text))}</li>`).join('')}</ul></div>` : '';
 function bridgeCommentary() {
@@ -878,7 +878,7 @@ function findingDrawer(id) {
       ${(f.management_questions || []).length ? `<h4>Question for management</h4>${say(f.management_questions.map(q => esc(clean(q))))}` : ''}
       ${dids.map(x => `<button class="btnl" data-ref="driver:${esc(x)}">Open ${esc((DRV_BY[x] || {}).label || x)} ›</button>`).join('')}` } };
 }
-const QC_NAME = { governed_reconciliation: 'Ties to the finance system totals', adjustments_included: 'Pro forma and capitalisation adjustments included', fiscal_calendar: 'Fiscal calendar', scope_exclusions: 'Subsidiaries left out', open_months: 'Months still open',
+const QC_NAME = { governed_reconciliation: 'Ties to the finance system totals', adjustments_included: 'Group adjustments included', fiscal_calendar: 'Fiscal calendar', scope_exclusions: 'Subsidiaries left out', open_months: 'Months still open',
   sign_convention: 'How costs are signed', sign_mismatch: 'Budget signed differently from actuals', budget_reliability: 'Budget usable for comparison', unmapped_accounts: 'Accounts outside the P&L lines',
   history: 'Months of history', prior_year_coverage: 'Prior year available', budget_coverage: 'Accounts with a budget', fiscal_year_budget: 'Full-year budget available', data_freshness: 'How recent the data is', window_tie_out: 'Quarter, year and twelve-month figures tie to the finance system',
   completeness: 'Nothing cut off', data_mode: 'Data source', scope: 'Scope' };

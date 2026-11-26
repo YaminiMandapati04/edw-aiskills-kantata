@@ -11,4 +11,4 @@ workbook laid out as in references/local-mode.md; both feed the same engine.
 """
 CONTRACT_VERSION = "sda.gtm-analysis/2.0.0"
 DIAGNOSIS_CONTRACT = "sda.gtm-diagnosis/1.0.0"
-RENDERER_VERSION = "2.0.0"
+RENDERER_VERSION = "1.11.0"

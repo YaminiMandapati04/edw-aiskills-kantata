@@ -335,102 +335,79 @@ def governed_file(wb, path, tamper=None):
     return path
 
 
-def yes_energy_checks(wb, out, payload, step):
-    """Yes Energy's view: values stored unsigned with ACCOUNT.P_AND_L_MULTIPLIER; manual adjustment rows marked by
-    INCOME_STATEMENT.ADJUSTMENT_TYPE: pro forma actuals on ordinary accounts, and the capitalisation of software and
-    commissions on keys -8001 / -8002 (inside Adjusted EBITDA, no subsidiary) reversed on -8003 below EBITDA."""
+def kantata_checks(wb, out, payload, step):
+    """Kantata's view: values stored unsigned with ACCOUNT.P_AND_L_MULTIPLIER, and group adjustment accounts (ACCOUNT_TYPE
+    'Adjustment') on negative keys with no subsidiary, below EBITDA and inside the governed net income."""
     from finance.load import rows_from_workbook, governed_from_workbook, NO_SUB
     iso = lambda r: {k: (v.isoformat()[:10] if hasattr(v, "isoformat") else v) for k, v in r.items()}
     rows, months = [], set()
     for r in map(iso, rows_from_workbook(wb)):
         m = 1.0 if str(r.get("COA_MAPPING_L3") or "").strip().lower() == "revenue" else -1.0
-        q = dict(r, P_AND_L_MULTIPLIER=m, ACCOUNT_TYPE="Income" if m > 0 else "Expense", ADJUSTMENT_TYPE=None)
+        q = dict(r, P_AND_L_MULTIPLIER=m, ACCOUNT_TYPE="Income" if m > 0 else "Expense")
         for k in ("TOTAL_MTD", "TOTAL_PY_MTD", "TOTAL_BUDGET_MTD"):
             q[k] = None if q.get(k) is None else float(q[k]) * m          # stored unsigned, as the view keeps it
         rows.append(q)
         months.add((r["PERIOD_START_DATE"], r.get("PERIOD_END_DATE"), r.get("YEAR"), r.get("QUARTER"), r.get("PERIOD")))
-    rev_row = next(r for r in rows if str(r.get("COA_MAPPING_L3")).lower() == "revenue" and r.get("SUBSIDIARY_NAME"))
-    sub0 = rev_row["SUBSIDIARY_NAME"]
-    CAP, PF = 40_000.0, 25_000.0
-    base = lambda start, end, year, qtr, per: {"PERIOD": per, "PERIOD_START_DATE": start, "PERIOD_END_DATE": end, "YEAR": year, "QUARTER": qtr,
-                                                "CLASS_NAME": None, "DEPARTMENT_NAME": None, "TOTAL_PY_MTD": None, "TOTAL_BUDGET_MTD": None}
+    ADJ = 50_000.0
     for start, end, year, qtr, per in sorted(months):
-        b = base(start, end, year, qtr, per)
-        rows.append({**b, "SUBSIDIARY_NAME": None, "CHART_OF_ACCOUNT_KEY": "-8002", "ACCOUNT_NUMBER": None, "ACCOUNT_NAME": "Capitalised Commissions",
-                     "ACCOUNT_TYPE": "Expense", "ADJUSTMENT_TYPE": "Adjustment for Capitalized expenses", "COA_MAPPING_L2": "Adjusted EBITDA",
-                     "COA_MAPPING_L3": "Operating Expenses", "COA_MAPPING_L4": "Fully loaded S&M Expense", "P_AND_L_MULTIPLIER": -1.0, "TOTAL_MTD": CAP})
-        rows.append({**b, "SUBSIDIARY_NAME": None, "CHART_OF_ACCOUNT_KEY": "-8003", "ACCOUNT_NUMBER": None, "ACCOUNT_NAME": "Reversal of Capitalised Portions",
-                     "ACCOUNT_TYPE": "OthExpense", "ADJUSTMENT_TYPE": "Adjustment for Capitalized expenses", "COA_MAPPING_L2": "Total Non-Operating Income (Expense)",
-                     "COA_MAPPING_L3": "Total Non-Operating Income (Expense)", "COA_MAPPING_L4": "Reversal of Capitalized Portions", "P_AND_L_MULTIPLIER": -1.0, "TOTAL_MTD": -CAP})
-        rows.append({**{k: rev_row.get(k) for k in rev_row}, **b, "SUBSIDIARY_NAME": sub0, "ADJUSTMENT_TYPE": "Pro Forma Actuals", "TOTAL_MTD": PF})
-    rp = os.path.join(out, "rows-yes-energy.json"); json.dump(rows, open(rp, "w", encoding="utf-8"))
+        rows.append({"PERIOD": per, "PERIOD_START_DATE": start, "PERIOD_END_DATE": end, "YEAR": year, "QUARTER": qtr, "SUBSIDIARY_NAME": None,
+                     "CHART_OF_ACCOUNT_KEY": "-10000", "ACCOUNT_NUMBER": "-10000", "ACCOUNT_NAME": "Amortization", "ACCOUNT_TYPE": "Adjustment",
+                     "COA_MAPPING_L2": "Total Non-Operating Income (Expense)", "COA_MAPPING_L3": "Total Non-Operating Income (Expense)",
+                     "COA_MAPPING_L4": "Depreciation & Amortization", "P_AND_L_MULTIPLIER": 1.0,
+                     "TOTAL_MTD": ADJ, "TOTAL_PY_MTD": ADJ, "TOTAL_BUDGET_MTD": None})
+    rp = os.path.join(out, "rows-kantata.json"); json.dump(rows, open(rp, "w", encoding="utf-8"))
     gov = [iso(r) for r in governed_from_workbook(wb)]
-    for g in gov:
-        if g["SUBSIDIARY_NAME"] == sub0:
-            g.update(REVENUE_MTD=float(g["REVENUE_MTD"]) + PF, ADJUSTED_EBITDA_MTD=float(g["ADJUSTED_EBITDA_MTD"]) + PF, NET_INCOME_MTD=float(g["NET_INCOME_MTD"]) + PF)
     for start, *_ in sorted(months):
-        gov.append({"PERIOD_START_DATE": start, "SUBSIDIARY_NAME": None, "REVENUE_MTD": 0.0, "ADJUSTED_EBITDA_MTD": -CAP, "NET_INCOME_MTD": 0.0})
-    gp = os.path.join(out, "gov-yes-energy.json"); json.dump(gov, open(gp, "w", encoding="utf-8"))
-    pk = os.path.join(out, "p-yes-energy.json")
+        gov.append({"PERIOD_START_DATE": start, "SUBSIDIARY_NAME": None, "REVENUE_MTD": 0.0, "ADJUSTED_EBITDA_MTD": 0.0, "NET_INCOME_MTD": ADJ})
+    gp = os.path.join(out, "gov-kantata.json"); json.dump(gov, open(gp, "w", encoding="utf-8"))
+    pk = os.path.join(out, "p-kantata.json")
     code, log = run(["analyze_finance.py", "--rows", rp, "--governed", gp, "--out", pk])
-    step("Yes Energy: unsigned values, pro forma and capitalisation adjustments build and tie to the governed totals", code == 0, log.strip().splitlines()[-1][:200] if code else "")
+    step("Kantata: unsigned values with the P&L multiplier and group adjustments build and tie to the governed net income", code == 0, log.strip().splitlines()[-1][:200] if code else "")
     if code:
         return
     k = json.load(open(pk, encoding="utf-8"))
     qc = {c["id"]: c for c in k["qc"]["checks"]}
-    step("Yes Energy: signs are read from the multiplier", qc["sign_convention"]["result"] == "PASS" and "P_AND_L_MULTIPLIER" in qc["sign_convention"]["detail"])
-    d = qc.get("adjustments_included", {}).get("detail", "")
-    step("Yes Energy: QC names both adjustment types and confirms the capitalisation nets to zero at net income",
-         qc.get("adjustments_included", {}).get("result") == "PASS" and "Pro Forma Actuals" in d and "Adjustment for Capitalized expenses" in d
-         and "net to zero" in d and set(k["meta"]["scope"]["adjustments"]) == {"Pro Forma Actuals", "Adjustment for Capitalized expenses"}
-         and NO_SUB in k["meta"]["scope"]["subsidiaries"], d[:200])
+    step("Kantata: signs are read from the multiplier", qc["sign_convention"]["result"] == "PASS" and "P_AND_L_MULTIPLIER" in qc["sign_convention"]["detail"])
+    step("Kantata: the adjustment is reported in the data checks and the scope, under the no-subsidiary label",
+         "adjustments_included" in qc and "Amortization" in qc["adjustments_included"]["detail"] and "Amortization" in k["meta"]["scope"]["adjustments"]
+         and NO_SUB in k["meta"]["scope"]["subsidiaries"])
     ln = lambda p, lid: next(x for x in p["lenses"]["YTD_py"]["lines"] if x["id"] == lid)
-    n = k["lenses"]["YTD_py"]["months"]
-    step("Yes Energy: Adjusted EBITDA carries the capitalisation and the pro forma, net income only the pro forma",
-         abs(ln(k, "ebitda")["actual_po"] - ln(payload, "ebitda")["actual_po"] - (PF - CAP) * n) < 0.05
-         and abs(ln(k, "ni")["actual_po"] - ln(payload, "ni")["actual_po"] - PF * n) < 0.05,
-         f"ebitda {ln(k, 'ebitda')['actual_po']} vs {ln(payload, 'ebitda')['actual_po']}; ni {ln(k, 'ni')['actual_po']} vs {ln(payload, 'ni')['actual_po']}")
-    A = {x["id"]: x for x in k["lenses"]["YTD_py"]["adjustments"]["types"]}
-    cap = A.get("adjustment_for_capitalized_expenses", {}).get("actual") or {}
-    step("Yes Energy: the lens adjustments block gives each type's EBITDA and net income impact",
-         abs(cap.get("ebitda", 0) + CAP * n) < 0.05 and abs(cap.get("ni", 1)) < 0.05
-         and abs(A["pro_forma_actuals"]["actual"]["rev"] - PF * n) < 0.05, json.dumps(cap)[:200])
-    code, log = run(["finance_brief.py", pk, "adjustments", "--lens", "YTD_py"])
-    step("Yes Energy: the brief exposes the adjustments with cited figures", code == 0 and "adjustments.types[" in log, log[:160])
-    bad = rows + [dict(rows[-3], CHART_OF_ACCOUNT_KEY="-10000", ACCOUNT_NAME="Unknown")]
-    bp = os.path.join(out, "rows-yes-energy-bad.json"); json.dump(bad, open(bp, "w", encoding="utf-8"))
-    code, log = run(["analyze_finance.py", "--rows", bp, "--governed", gp, "--out", os.path.join(out, "p-ye-bad.json")])
-    step("Yes Energy: a negative key that is neither a roll-up nor a capitalisation key refuses the build", code != 0 and "-10000" in log, log.strip().splitlines()[-1][:160])
-    bad = [dict(r, ADJUSTMENT_TYPE="Mystery Adjustment") if r.get("ADJUSTMENT_TYPE") == "Pro Forma Actuals" else r for r in rows]
-    json.dump(bad, open(bp, "w", encoding="utf-8"))
-    code, log = run(["analyze_finance.py", "--rows", bp, "--governed", gp, "--out", os.path.join(out, "p-ye-bad.json")])
-    step("Yes Energy: an unknown adjustment type refuses the build (never dropped)", code != 0 and "Mystery Adjustment" in log, log.strip().splitlines()[-1][:160])
+    months_ytd = k["lenses"]["YTD_py"]["months"]
+    step("Kantata: Adjusted EBITDA is unchanged and net income carries the adjustment below EBITDA",
+         abs(ln(k, "ebitda")["actual_po"] - ln(payload, "ebitda")["actual_po"]) < 0.02
+         and abs(ln(k, "ni")["actual_po"] - ln(payload, "ni")["actual_po"] - ADJ * months_ytd) < 0.02,
+         f"ni {ln(k, 'ni')['actual_po']} vs {ln(payload, 'ni')['actual_po']} + {ADJ * months_ytd}")
+    bad = [dict(r, ACCOUNT_TYPE="Expense") if r["CHART_OF_ACCOUNT_KEY"] == "-10000" else r for r in rows]
+    bp = os.path.join(out, "rows-kantata-bad.json"); json.dump(bad, open(bp, "w", encoding="utf-8"))
+    code, log = run(["analyze_finance.py", "--rows", bp, "--governed", gp, "--out", os.path.join(out, "p-kantata-bad.json")])
+    step("Kantata: a negative key that is neither a roll-up nor an adjustment account refuses the build", code != 0 and "-10000" in log, log.strip().splitlines()[-1][:160])
 
 
 def fiscal_checks(payload, step):
-    """Yes Energy's fiscal year is the calendar year: year to date starts on 1 January, quarters are calendar quarters,
-    and the outlook runs to 31 December."""
+    """Kantata's fiscal year runs February to January, named by the year it ends in: year to date starts on 1 February,
+    quarters are Feb-Apr / May-Jul / Aug-Oct / Nov-Jan, and the outlook runs to 31 January. The view's own QTD / YTD columns
+    are calendar, so the tie-out compares them with calendar sums."""
     import datetime as _dt
     from finance.common import fiscal_period
     from finance.model import window_range
     L = payload["lenses"]
     asof = payload["meta"]["as_of"]
-    step("Yes Energy fiscal year: year to date starts in January",
-         all(L[k]["range"]["start"][5:7] == "01" for k in ("YTD_budget", "YTD_py") if L[k]["available"]) and L["YTD_py"]["available"],
+    step("Kantata fiscal year: year to date starts in February",
+         all(L[k]["range"]["start"][5:7] == "02" for k in ("YTD_budget", "YTD_py") if L[k]["available"]) and L["YTD_py"]["available"],
          L["YTD_py"]["range"]["start"])
-    q_start = f"{asof['start'][:4]}-{(int(asof['start'][5:7]) - 1) // 3 * 3 + 1:02d}-01"
-    step("Yes Energy fiscal year: quarter to date runs on calendar quarters",
-         L["QTD_py"]["range"]["start"] == q_start and asof["year"] == int(asof["start"][:4]), L["QTD_py"]["range"]["start"])
+    step("Kantata fiscal year: quarter to date runs on fiscal quarters (Aug-Oct for October)",
+         L["QTD_py"]["range"]["start"] == "2026-08-01" and asof["quarter"] == 3 and asof["year"] == 2027, L["QTD_py"]["range"]["start"])
     o = payload["outlook"]
-    step("Yes Energy fiscal year: the outlook is the calendar year with the months to December to run",
-         o["fiscal_year"] == int(asof["start"][:4]) and o["remaining_months"] == 12 - int(asof["start"][5:7]), f"{o['fiscal_year']} {o['remaining_months']}")
+    step("Kantata fiscal year: the outlook is FY2027 with three months to run (Nov-Jan)", o["fiscal_year"] == 2027 and o["remaining_months"] == 3,
+         f"{o['fiscal_year']} {o['remaining_months']}")
     qc = {c["id"]: c for c in payload["qc"]["checks"]}
-    step("Yes Energy fiscal year: QC states the fiscal calendar", qc.get("fiscal_calendar", {}).get("result") == "PASS")
-    months = [_dt.date(2026, 1, 1), _dt.date(2026, 2, 1), _dt.date(2026, 4, 1), _dt.date(2026, 12, 1), _dt.date(2027, 1, 1)]
-    got = [fiscal_period(m, 1) for m in months]
-    P = [{"year": 2025 + (k // 12), "quarter": (k % 12) // 3 + 1} for k in range(24)]   # Jan 2025 .. Dec 2026
-    step("Yes Energy fiscal year: without YEAR / QUARTER the start month 1 gives calendar FY and quarter",
-         got == [(2026, 1), (2026, 1), (2026, 2), (2026, 4), (2027, 1)] and window_range(P, 20, "YTD") == (12, 20) and window_range(P, 20, "QTD") == (18, 20),
+    step("Kantata fiscal year: QC states the fiscal calendar", qc.get("fiscal_calendar", {}).get("result") == "PASS")
+    months = [_dt.date(2026, 1, 1), _dt.date(2026, 2, 1), _dt.date(2026, 4, 1), _dt.date(2026, 5, 1), _dt.date(2027, 1, 1)]
+    got = [fiscal_period(m, 2) for m in months]
+    P = [{"year": fiscal_period(_dt.date(2025 + (k // 12), k % 12 + 1, 1), 2)[0], "quarter": fiscal_period(_dt.date(2025 + (k // 12), k % 12 + 1, 1), 2)[1]}
+         for k in range(24)]                                   # Jan 2025 .. Dec 2026, no YEAR / QUARTER in the extract
+    step("Kantata fiscal year: without YEAR / QUARTER the configured start month gives FY and quarter (Feb 2026 = FY2027 Q1, Jan 2027 = FY2027 Q4)",
+         got == [(2026, 4), (2027, 1), (2027, 1), (2027, 2), (2027, 4)] and window_range(P, 20, "YTD") == (13, 20) and window_range(P, 20, "QTD") == (19, 20),
          str(got))
 
 
@@ -880,7 +857,7 @@ def main():
     for key, label in (("MTD_py", "prior-year lens"), ("YTD_budget", "year-to-date lens")):
         step(f"{label} available", payload["lenses"][key]["available"])
     v15_checks(wb, out, payload, payload_path, os.path.join(out, "baseline.html"), step)
-    yes_energy_checks(wb, out, payload, step)
+    kantata_checks(wb, out, payload, step)
     memo_checks(wb, out, payload, step)
     fiscal_checks(payload, step)
     sign_and_budget_checks(wb, out, payload, step)

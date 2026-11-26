@@ -5,7 +5,7 @@ result (result_set.data + rowType) or a CSV with the column names the view retur
 The statements and file names are in references/dashboards.md §2:
 
   gtm-lines-*.json          BOOKING_LINES by booking date, metric, opportunity type, product, subsidiary, account and opportunity
-  gtm-open-*.json           open OPPORTUNITIES lines (account, owner, product, source, type, stage, close date, open ACV and WEIGHTED open ACV)
+  gtm-open-*.json           open OPPORTUNITIES in a pipeline stage (account, owner, product, source, type, stage, close date, open ACV)
   gtm-conv-source.json      won / lost ACV and opportunities by close month and opportunity source
   gtm-conv-product.json     the same by close month and product
   gtm-created.json          PIPELINE_CREATED_ACV and OPPORTUNITIES_CREATED by creation month
@@ -18,16 +18,11 @@ The statements and file names are in references/dashboards.md §2:
   gtm-conv-size.json        won / lost ACV of positive-ACV opportunities and $5k+ counts by close month (optional)
   gtm-cards.json            PIPELINE_OVERVIEW KPI cards at IS_LATEST (open, counts, average, created; PY twins)
   gtm-cards-snapshot.json   the same cards at the bookings month-end (the headline pipeline date)
-  gtm-snapshot-ecq.json     weighted pipeline at the bookings month-end by stage and close date (grouped here into fiscal quarters) (recommended)
+  gtm-snapshot-ecq.json     open pipeline at the bookings month-end by stage and close date (grouped here into fiscal quarters) (recommended)
   gtm-bookings-mart.json    BOOKINGS_OVERVIEW TOTAL_BOOKINGS_MTD at every month-end (tie-out only)
 
-Pipeline is WEIGHTED (ACV x Salesforce PROBABILITY / 100): the open lines carry WEIGHTED_OPEN_PIPELINE_ACV, the
-cards and the snapshot carry WEIGHTED_PIPELINE_VALUE_* / WEIGHTED_PIPELINE_ACV_ASAT, and this loader hands the engine
-the weighted figure as "open" / "acv" so every pipeline figure (close quarters, stage grid, risk tiers) is weighted and
-ties to the weighted card. The unweighted value is kept alongside (OPEN_PIPELINE_VALUE_*_UNWEIGHTED, "acv_unweighted")
-for context only. Pipeline created, won and lost stay unweighted (the view has no weighted twins).
-The view has no pipeline targets, no loss reason and no subscription state: none of them is read.
-Quarters are fiscal, and the fiscal year is the calendar year (common.FY_START_MONTH = 1).
+The view has no pipeline targets, no weighted pipeline in use, no loss reason and no subscription state:
+none of them is read. Quarters are fiscal (common.FY_START_MONTH).
 
 Fails closed: a file whose returned rows differ from the reported row count (a capped tool
 result), overlapping line chunks or a missing month all raise BuildError."""
@@ -40,7 +35,7 @@ import os
 from .common import BuildError, qlabel, to_date, to_num
 
 REQUIRED = ("gtm-lines-*", "gtm-open-*", "gtm-conv-source", "gtm-conv-product", "gtm-created")
-LATE_STAGE_ORDER = 5            # Align onwards (DIM_STAGE_MAPPING.STAGE_ORDER; 1 = Stage 0, 7 = Invest)
+LATE_STAGE_ORDER = 5            # 04 - PROPOSE onwards (DIM_STAGE_MAPPING.STAGE_ORDER; 1 = 00 - PROSPECT)
 
 
 def read_rows(path):
@@ -96,9 +91,7 @@ def load(folder):
             spans.append((min(ds), max(ds), os.path.basename(f)))
         for r, d in zip(rows, ds):
             lines.append({"BOOKINGS_DATE": d, "BOOKING_METRIC": r.get("BOOKING_METRIC"), "OPPORTUNITY_TYPE": r.get("OPPORTUNITY_TYPE"),
-                          # lines are held to the cent: the view carries 6 decimals, and with hundreds of products per-step rounding would
-                          # otherwise leave the bridges a few cents out
-                          "BOOKING_ACV_USD": round(to_num(r.get("BOOKING_ACV_USD")) or 0.0, 2), "PRODUCT": r.get("PRODUCT"), "SUBSIDIARY_NAME": r.get("SUBSIDIARY_NAME"),
+                          "BOOKING_ACV_USD": r.get("BOOKING_ACV_USD"), "PRODUCT": r.get("PRODUCT"), "SUBSIDIARY_NAME": r.get("SUBSIDIARY_NAME"),
                           "COMPANY_NAME": r.get("ACCOUNT_NAME") or r.get("COMPANY_NAME"),
                           "SOURCE_ORDER": r.get("OPPORTUNITY_ID") or r.get("SOURCE_ORDER")})
         prov.append({"file": os.path.basename(f), "rows": len(rows)})
@@ -113,25 +106,20 @@ def load(folder):
             raise BuildError(f"no booking lines for {m:%Y-%m}: a chunk is missing")
         m = dt.date(m.year + (m.month == 12), m.month % 12 + 1, 1)
 
-    # open pipeline: one row per opportunity line; the governed open metric applies the open filter, so a row with no open
-    # ACV is not pipeline. The engine works on the WEIGHTED value (WEIGHTED_OPEN_PIPELINE_ACV = ACV x probability / 100).
+    # open pipeline: one row per opportunity; the governed open metric applies the pipeline filter (a pipeline stage and
+    # ACV above 0), so a row with no open ACV is not pipeline. Values are unweighted.
     open_deals = []
     for f in _files(folder, "gtm-open-*"):
         rows = read_rows(f)
-        if rows and "WEIGHTED_OPEN_PIPELINE_ACV" not in rows[0]:
-            raise BuildError(f"{os.path.basename(f)}: no WEIGHTED_OPEN_PIPELINE_ACV column; the open extract must carry the weighted metric "
-                             "(references/dashboards.md §2)")
         for r in rows:
-            unw = to_num(r.get("OPEN_PIPELINE_ACV")) or 0.0
-            if unw == 0:
+            acv = to_num(r.get("OPEN_PIPELINE_ACV")) or 0.0
+            if acv == 0:
                 continue
-            acv = to_num(r.get("WEIGHTED_OPEN_PIPELINE_ACV")) or 0.0
             close = to_date(r["CLOSE_DATE"]) if r.get("CLOSE_DATE") else None
             open_deals.append({"id": str(r["OPPORTUNITY_ID"]), "name": str(r.get("OPPORTUNITY_NAME") or ""), "owner": str(r.get("OWNER_NAME") or ""),
                                "product": str(r.get("PRODUCT") or ""), "source": _src(r),
                                "stage": str(r.get("STAGE_NAME") or ""), "stage_order": int(to_num(r.get("STAGE_ORDER")) or 99),
-                               "close": close, "ecq": qlabel(close) if close else "", "acv": acv, "acv_unweighted": unw,
-                               "probability": to_num(r.get("PROBABILITY")),
+                               "close": close, "ecq": qlabel(close) if close else "", "acv": acv,
                                "account": str(r.get("ACCOUNT_NAME") or "") or None, "family": r.get("PRODUCT_FAMILY"),
                                "stype": r.get("OPPORTUNITY_TYPE"),
                                "pipe_created": to_date(str(r["PIPELINE_CREATION_DATE"])[:10]) if r.get("PIPELINE_CREATION_DATE") else None,
@@ -230,20 +218,7 @@ def load(folder):
         return rows
 
     def card(rows):
-        """KPI cards with the pipeline value switched to WEIGHTED: OPEN_PIPELINE_VALUE_<W> takes WEIGHTED_PIPELINE_VALUE_<W>
-        (the unweighted value is kept as <name>_UNWEIGHTED) and the average opportunity value is weighted value / open count."""
-        if not rows:
-            return None
-        c = {k: (to_num(v) if k != "AS_OF_DATE" else str(v)[:10]) for k, v in rows[0].items()}
-        for w in ("MTD", "PYMTD", "QTD", "PYQTD", "YTD", "PYYTD", "LTM", "PYLTM"):
-            o, wt = f"OPEN_PIPELINE_VALUE_{w}", f"WEIGHTED_PIPELINE_VALUE_{w}"
-            if o in c or wt in c:
-                if wt not in c:
-                    raise BuildError(f"KPI card extract has {o} but not {wt}: pipeline is weighted (references/dashboards.md §2)")
-                c[o + "_UNWEIGHTED"], c[o] = c.get(o), c[wt]
-                n = c.get(f"OPEN_OPPORTUNITIES_{w}")
-                c[f"AVG_OPPORTUNITY_VALUE_ACV_{w}"] = c[wt] / n if c[wt] is not None and n else None
-        return c
+        return {k: (to_num(v) if k != "AS_OF_DATE" else str(v)[:10]) for k, v in rows[0].items()} if rows else None
     cards = card(one("gtm-cards"))
     snapshot = card(one("gtm-cards-snapshot"))
 
@@ -251,8 +226,8 @@ def load(folder):
     bm = one("gtm-bookings-mart")
     mart = {_month(to_date(r["AS_OF_DATE"])): to_num(r.get("TOTAL_BOOKINGS_MTD")) for r in bm if r.get("AS_OF_DATE")} if bm else None
 
-    # weighted pipeline at the bookings month-end by stage and close date (or close month, older extracts); the engine groups
-    # it into past due / fiscal close quarters / later, so the buckets foot to the weighted snapshot card
+    # open pipeline at the bookings month-end by stage and close date (or close month, older extracts); the engine groups it
+    # into past due / fiscal close quarters / later, so the buckets foot to the snapshot card
     ecq_rows = one("gtm-snapshot-ecq")
     snapshot_ecq = None
     if ecq_rows is not None:
@@ -260,8 +235,7 @@ def load(folder):
         for r in ecq_rows:
             cd = r.get("CLOSE_DATE") or r.get("CLOSE_MONTH")
             snapshot_ecq.append({"stage": str(r.get("STAGE_NAME") or "") or None, "close": to_date(str(cd)[:10]) if cd else None,
-                                 "by_month": not r.get("CLOSE_DATE"), "open": to_num(r.get("WEIGHTED_PIPELINE_ACV_ASAT")) or 0.0,
-                                 "open_unweighted": to_num(r.get("OPEN_PIPELINE_ACV_ASAT")),
+                                 "by_month": not r.get("CLOSE_DATE"), "open": to_num(r.get("OPEN_PIPELINE_ACV_ASAT")) or 0.0,
                                  "count": int(to_num(r.get("OPEN_OPPORTUNITIES_ASAT")) or 0)})
 
     cs = one("gtm-conv-size")

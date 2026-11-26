@@ -32,8 +32,8 @@ def q(con, sql):
 def gtm(con):
     meas = q(con, """
 SELECT BOOKING_METRIC,
-  SUM(CASE WHEN BOOKING_DATE BETWEEN '2026-01-01' AND '2026-10-31' THEN BOOKING_ACV_USD END),
-  SUM(CASE WHEN BOOKING_DATE BETWEEN '2025-01-01' AND '2025-10-31' THEN BOOKING_ACV_USD END)
+  SUM(CASE WHEN BOOKING_DATE BETWEEN '2026-02-01' AND '2026-10-31' THEN BOOKING_ACV_USD END),
+  SUM(CASE WHEN BOOKING_DATE BETWEEN '2025-02-01' AND '2025-10-31' THEN BOOKING_ACV_USD END)
 FROM BOOKING_LINES GROUP BY BOOKING_METRIC ORDER BY BOOKING_METRIC""")
     tot_y = sum(r[1] for r in meas)
     tot_p = sum(r[2] for r in meas)
@@ -46,7 +46,7 @@ WHERE BOOKING_DATE BETWEEN '2026-10-01' AND '2026-10-31' AND ACCOUNT_NAME IS NOT
     top2 = (cust[0][1] + cust[1][1]) / oct_total
     return {
         "meta": {"title": "Bookings fiscal YTD vs prior year (local demo)", "question": "How are bookings tracking, and who drove October?",
-                 "period": "FY2026 YTD (Jan-Oct 2026) vs FY2025 YTD (Jan-Oct 2025)", "as_of": "2026-10-31", "currency": "USD", "scale": "$ millions",
+                 "period": "FY2027 YTD (Feb-Oct 2026) vs FY2026 YTD (Feb-Oct 2025)", "as_of": "2026-10-31", "currency": "USD", "scale": "$ millions",
                  "sources": ["gtm_sample.xlsx: BOOKING_LINES"], "data_mode": "local"},
         "headline": (f"Bookings are ${tot_y / MM:.1f}mn fiscal year to date, {abs(tot_y / tot_p - 1) * 100:.1f}% "
                      f"{'above' if tot_y >= tot_p else 'below'} the same period last year. {cust[0][0]} and {cust[1][0]} "
@@ -59,7 +59,7 @@ WHERE BOOKING_DATE BETWEEN '2026-10-01' AND '2026-10-31' AND ACCOUNT_NAME IS NOT
             {"id": "by_measure", "title": "Bookings by measure, fiscal YTD vs prior year", "provenance": "derived",
              "columns": [{"name": "Measure", "type": "text"}, {"name": "YTD ($mn)", "type": "currency_mm"},
                          {"name": "Prior-year YTD ($mn)", "type": "currency_mm"}, {"name": "Change", "type": "percent"}],
-             "rows": rows, "sql": "SUM(BOOKING_ACV_USD) on BOOKING_LINES by BOOKING_METRIC over fiscal YTD (from 1 January) and the prior-year fiscal YTD"},
+             "rows": rows, "sql": "SUM(BOOKING_ACV_USD) on BOOKING_LINES by BOOKING_METRIC over fiscal YTD (from 1 February) and the prior-year fiscal YTD"},
             {"id": "oct_customers", "title": "Top 5 customers, Oct 2026 recurring bookings", "provenance": "derived",
              "columns": [{"name": "Customer", "type": "text"}, {"name": "Bookings ($mn)", "type": "currency_mm", "total": "sum"},
                          {"name": "Share of October", "type": "percent"}],
@@ -74,7 +74,7 @@ WHERE BOOKING_DATE BETWEEN '2026-10-01' AND '2026-10-31' AND ACCOUNT_NAME IS NOT
                     "y": ["YTD ($mn)", "Prior-year YTD ($mn)"], "provenance": "derived"}],
         "findings": [{"text": f"The top two customers' share of October bookings is {top2 * 100:.0f}%.", "evidence": "established"}],
         "caveats": ["Synthetic sample workbook. October bookings are concentrated by design.",
-                    "Fiscal year is the calendar year (FY2026 = Jan 2026 to Dec 2026)."],
+                    "Fiscal year 1 February to 31 January (FY2027 = Feb 2026 to Jan 2027)."],
     }
 
 

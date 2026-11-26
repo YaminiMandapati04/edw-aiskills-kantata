@@ -3,7 +3,7 @@
 diagnosis is written against the payload that build_gtm_dashboard.py --payload-out saved).
 
 Usage:
-  python render_gtm_dashboard.py --payload work/gtm_payload.json --diagnosis work/diagnosis_qtd.json [--out outputs/yes_energy_pipeline_risk_readout.html]
+  python render_gtm_dashboard.py --payload work/gtm_payload.json --diagnosis work/diagnosis_qtd.json [--out outputs/pipeline_risk_readout.html]
                                  [--allow-missing-review]
 
 Each diagnosis passes the admission gate (scripts/gtm/diagnosis.py) or nothing is written. The opening view (the
@@ -32,7 +32,7 @@ def main():
     ap.add_argument("--payload", required=True)
     ap.add_argument("--diagnosis", nargs="*", default=[], help="diagnosis.json file(s), one per view, written against this payload")
     ap.add_argument("--allow-missing-review", action="store_true", help="publish without the opening view's review (the page says which views are not AI reviewed)")
-    ap.add_argument("--out", default=os.path.join(SKILL, "outputs", "yes_energy_pipeline_risk_readout.html"))
+    ap.add_argument("--out", default=os.path.join(SKILL, "outputs", "pipeline_risk_readout.html"))
     a = ap.parse_args()
     try:
         with open(a.payload, encoding="utf-8") as fh:

@@ -14,20 +14,21 @@ verbatim with the Snowflake sql-exec tool and save the full result to <work>/raw
   bs           FINANCE_ANALYTICS  BALANCE_SHEET.ENDING_BALANCE_CONVERTED by month x COA L1..L4
   cf           FINANCE_ANALYTICS  CASH_FLOW.TOTAL_MTD by month x CASH_FLOW_L1..L3 x COA L1 / L3 (the COA levels classify the
                                   rows the view leaves without a cash-flow label: group adjustments and the translation reserve)
-  arr          ARR_ANALYTICS      ARR_WATERFALL TOTAL_MTD and TOTAL_LTM by month-end (ARR_MONTH_END) x CATEGORY (USD as the view stores it;
-                                  the categories include FX, the currency movement on non-USD contracts)
-  customers    ARR_ANALYTICS      CUSTOMER_BRIDGE.TOTAL_LTM by month-end (ARR_MONTH_END) x CATEGORY (LTM: each category is measured
-                                  against the closing customer count 12 months back)
-  bookings     GTM_ANALYTICS      BOOKINGS_OVERVIEW ARR New, ARR Upsell, recurring, non-recurring and total MTD bookings by month-end
+  arr          ARR_ANALYTICS      ARR_BRIDGE TOTAL_MTD and TOTAL_LTM by month-end x CATEGORY (USD as the view stores it)
+  customers    ARR_ANALYTICS      CUSTOMER_BRIDGE.TOTAL_LTM by month-end x CATEGORY (LTM: each category measured against the
+                                  closing customer count 12 months back; Beginning Customers is that count)
+  bookings     GTM_ANALYTICS      BOOKINGS_OVERVIEW recurring, non-recurring and total MTD bookings by month-end
   pipeline     GTM_ANALYTICS      PIPELINE_OVERVIEW open and weighted pipeline by month-end (the view has no coverage ratio)
-  hosting      FINANCE_ANALYTICS  INCOME_STATEMENT.TOTAL_MTD for the hosting accounts in scope.json (ACCOUNT_NUMBER) by month x
-                                  BUCKET (COGS where COA L3 = Cost of Sales, R&D otherwise) x P_AND_L_MULTIPLIER
-  revolver     FINANCE_ANALYTICS  REVOLVER.REVOLVER_AMOUNT (as AMOUNT) by METRIC x MONTH_START_DATE (Revolver Size, Drawn Revolver,
-                                  Principal Payments; maintained by Finance; no subsidiary dimension, so never subsidiary-filtered)
-Account exclusion (opt-in; without it every account is included and the queries are unchanged): the Salesforce account IDs
-given are filtered out of bookings and pipeline (DIM_ACCOUNT.ACCOUNT_ID). Rows with no account (NetSuite non-recurring
-bookings) are kept. ARR_ANALYTICS keys customers by Yes Energy / RTO Insider customer ID, not Salesforce account, and
-FINANCE_ANALYTICS has no Salesforce account, so ARR, customers, the P&L, balance sheet and cash flow always cover every customer. Each ID must be an 18-character Salesforce ID (the views store that form).
+  revolver     FINANCE_ANALYTICS  REVOLVER.REVOLVER_AMOUNT by METRIC x month start (Revolver Size), USD. Finance's manual table
+                                  (PROD_DB.MANUAL.REVOLVER): no subsidiary dimension and no relationship to any other table, so it
+                                  never carries a subsidiary filter. METRIC values are separate measures, never added.
+  revolver_drawn FINANCE_ANALYTICS BALANCE_SHEET.ENDING_BALANCE_CONVERTED by month for ACCOUNT_NUMBER 280360 (config/scope.json
+                                  revolver_drawn_account): Drawn Revolver, the balance sheet MTD value of the revolver account
+Account exclusion: the internal test accounts in config/scope.json exclude_accounts are always left out; Salesforce account
+IDs the user names (--exclude-accounts / --exclude-accounts-file) are added on top. They are filtered out of arr and customers
+(CUSTOMER.ACCOUNT_ID) and of bookings and pipeline (DIM_ACCOUNT.ACCOUNT_ID), by ID only, never by name. Rows with no account
+(NetSuite non-recurring bookings) are kept. FINANCE_ANALYTICS has no Salesforce account, so the P&L, balance
+sheet and cash flow always cover every customer. Each ID must be an 18-character Salesforce ID (the views store that form).
 Exit codes: 0 written, 1 refused.
 """
 import argparse
@@ -54,10 +55,10 @@ EXPECTED_COLUMNS = {
     "cf": ["PERIOD_START_DATE", "CASH_FLOW_L1", "CASH_FLOW_L2", "CASH_FLOW_L3", "COA_MAPPING_L1", "COA_MAPPING_L3", "TOTAL_MTD"],
     "arr": ["MONTH_END_DATE", "CATEGORY", "TOTAL_MTD", "TOTAL_LTM"],
     "customers": ["MONTH_END_DATE", "CATEGORY", "TOTAL_LTM"],
-    "bookings": ["AS_OF_DATE", "ARR_NEW_MTD", "ARR_UPSELL_MTD", "RECURRING_BOOKINGS_MTD", "NON_RECURRING_BOOKINGS_MTD", "TOTAL_BOOKINGS_MTD"],
+    "bookings": ["AS_OF_DATE", "RECURRING_BOOKINGS_MTD", "NON_RECURRING_BOOKINGS_MTD", "TOTAL_BOOKINGS_MTD"],
     "pipeline": ["AS_OF_DATE", "OPEN_PIPELINE_VALUE_MTD", "WEIGHTED_PIPELINE_VALUE_MTD"],
-    "hosting": ["PERIOD_START_DATE", "BUCKET", "P_AND_L_MULTIPLIER", "TOTAL_MTD"],
-    "revolver": ["METRIC", "MONTH_START_DATE", "AMOUNT"],
+    "revolver": ["METRIC", "MONTH_START_DATE", "REVOLVER_AMOUNT"],
+    "revolver_drawn": ["PERIOD_START_DATE", "ENDING_BALANCE_CONVERTED"],
 }
 ORDER = list(EXPECTED_COLUMNS)
 
@@ -127,13 +128,14 @@ def expected_columns(name):
     return list(EXPECTED_COLUMNS[name])
 
 
-def build_queries(view_db, view_schema, first, last, exclusions, rollup_keys, l6_kept, accounts=(), hosting_accounts=()):
+def build_queries(view_db, view_schema, first, last, exclusions, rollup_keys, l6_kept, accounts=(), drawn_account="280360"):
     fq = lambda v: f"{view_db}.{view_schema}.{v}"
     fs, ls = first.isoformat(), last.isoformat()
     fe, le = month_end(first).isoformat(), month_end(last).isoformat()
     excl_fin = f"\n    AND SUBSIDIARY.SUBSIDIARY_NAME NOT IN ({sql_list(exclusions)})" if exclusions else ""
     excl_bkg = f"\n    AND BOOKINGS_OVERVIEW.SUBSIDIARY_NAME NOT IN ({sql_list(exclusions)})" if exclusions else ""
     keys = sql_list(rollup_keys)
+    acct_arr = account_filter("CUSTOMER.ACCOUNT_ID", accounts)          # ARR_ANALYTICS: bridge -> CUSTOMER
     acct_gtm = account_filter("DIM_ACCOUNT.ACCOUNT_ID", accounts)       # GTM_ANALYTICS: overview -> DIM_ACCOUNT
     return {
         "pl": f"""SELECT PERIOD_START_DATE, COA_MAPPING_L2, COA_MAPPING_L3, COA_MAPPING_L4, COA_MAPPING_L5,
@@ -173,24 +175,24 @@ ORDER BY 1, 2, 3, 4, 5""",
   WHERE      PERIOD.PERIOD_START_DATE BETWEEN '{fs}' AND '{ls}'{excl_fin}
 )
 ORDER BY 1, 2, 3, 4, 5, 6""",
-        "arr": f"""SELECT ARR_MONTH_END AS MONTH_END_DATE, CATEGORY, TOTAL_MTD, TOTAL_LTM FROM SEMANTIC_VIEW(
+        "arr": f"""SELECT * FROM SEMANTIC_VIEW(
   {fq('ARR_ANALYTICS')}
-  DIMENSIONS ARR_WATERFALL.ARR_MONTH_END, ARR_WATERFALL.CATEGORY
-  METRICS    ARR_WATERFALL.TOTAL_MTD, ARR_WATERFALL.TOTAL_LTM
-  WHERE      ARR_WATERFALL.ARR_MONTH_END BETWEEN '{fe}' AND '{le}'
+  DIMENSIONS ARR_BRIDGE.MONTH_END_DATE, ARR_BRIDGE.CATEGORY
+  METRICS    ARR_BRIDGE.TOTAL_MTD, ARR_BRIDGE.TOTAL_LTM
+  WHERE      ARR_BRIDGE.MONTH_END_DATE BETWEEN '{fe}' AND '{le}'{acct_arr}
 )
 ORDER BY 1, 2""",
-        "customers": f"""SELECT ARR_MONTH_END AS MONTH_END_DATE, CATEGORY, TOTAL_LTM FROM SEMANTIC_VIEW(
+        "customers": f"""SELECT * FROM SEMANTIC_VIEW(
   {fq('ARR_ANALYTICS')}
-  DIMENSIONS CUSTOMER_BRIDGE.ARR_MONTH_END, CUSTOMER_BRIDGE.CATEGORY
+  DIMENSIONS CUSTOMER_BRIDGE.MONTH_END_DATE, CUSTOMER_BRIDGE.CATEGORY
   METRICS    CUSTOMER_BRIDGE.TOTAL_LTM
-  WHERE      CUSTOMER_BRIDGE.ARR_MONTH_END BETWEEN '{fe}' AND '{le}'
+  WHERE      CUSTOMER_BRIDGE.MONTH_END_DATE BETWEEN '{fe}' AND '{le}'{acct_arr}
 )
 ORDER BY 1, 2""",
         "bookings": f"""SELECT * FROM SEMANTIC_VIEW(
   {fq('GTM_ANALYTICS')}
   DIMENSIONS BOOKINGS_OVERVIEW.AS_OF_DATE
-  METRICS    BOOKINGS_OVERVIEW.ARR_NEW_MTD, BOOKINGS_OVERVIEW.ARR_UPSELL_MTD, BOOKINGS_OVERVIEW.RECURRING_BOOKINGS_MTD, BOOKINGS_OVERVIEW.NON_RECURRING_BOOKINGS_MTD, BOOKINGS_OVERVIEW.TOTAL_BOOKINGS_MTD
+  METRICS    BOOKINGS_OVERVIEW.RECURRING_BOOKINGS_MTD, BOOKINGS_OVERVIEW.NON_RECURRING_BOOKINGS_MTD, BOOKINGS_OVERVIEW.TOTAL_BOOKINGS_MTD
   WHERE      BOOKINGS_OVERVIEW.AS_OF_DATE BETWEEN '{fe}' AND '{le}'{excl_bkg}{acct_gtm}
 )
 ORDER BY 1""",
@@ -201,25 +203,24 @@ ORDER BY 1""",
   WHERE      PIPELINE_OVERVIEW.AS_OF_DATE BETWEEN '{fe}' AND '{le}'{acct_gtm}
 )
 ORDER BY 1""",
-        "hosting": f"""SELECT PERIOD_START_DATE, IFF(COA_MAPPING_L3 = 'Cost of Sales', 'COGS', 'R&D') AS BUCKET,
-       P_AND_L_MULTIPLIER, SUM(TOTAL_MTD) AS TOTAL_MTD
-FROM SEMANTIC_VIEW(
-  {fq('FINANCE_ANALYTICS')}
-  DIMENSIONS PERIOD.PERIOD_START_DATE, ACCOUNT.COA_MAPPING_L3, ACCOUNT.P_AND_L_MULTIPLIER
-  METRICS    INCOME_STATEMENT.TOTAL_MTD
-  WHERE      PERIOD.PERIOD_START_DATE BETWEEN '{fs}' AND '{ls}'
-    AND ACCOUNT.ACCOUNT_NUMBER IN ({sql_list(hosting_accounts)}){excl_fin}
-)
-GROUP BY 1, 2, 3
-ORDER BY 1, 2, 3""",
-        # REVOLVER has no relationship to SUBSIDIARY or any other table: never subsidiary-filtered
-        "revolver": f"""SELECT METRIC, MONTH_START_DATE, REVOLVER_AMOUNT AS AMOUNT FROM SEMANTIC_VIEW(
+        # no subsidiary or account filter, ever: the REVOLVER table relates to no other table
+        "revolver": f"""SELECT * FROM SEMANTIC_VIEW(
   {fq('FINANCE_ANALYTICS')}
   DIMENSIONS REVOLVER.METRIC, REVOLVER.MONTH_START_DATE
   METRICS    REVOLVER.REVOLVER_AMOUNT
   WHERE      REVOLVER.MONTH_START_DATE BETWEEN '{fs}' AND '{ls}'
 )
 ORDER BY 1, 2""",
+        # Drawn Revolver: the balance sheet month-end balance of the revolver account (a balance sheet line, so the
+        # subsidiary exclusion applies as it does to bs)
+        "revolver_drawn": f"""SELECT * FROM SEMANTIC_VIEW(
+  {fq('FINANCE_ANALYTICS')}
+  DIMENSIONS PERIOD.PERIOD_START_DATE
+  METRICS    BALANCE_SHEET.ENDING_BALANCE_CONVERTED
+  WHERE      PERIOD.PERIOD_START_DATE BETWEEN '{fs}' AND '{ls}'
+    AND ACCOUNT.ACCOUNT_NUMBER = '{drawn_account}'{excl_fin}
+)
+ORDER BY 1""",
     }
 
 
@@ -229,7 +230,7 @@ def main():
     ap.add_argument("--months", type=int, default=24, help="months in the window (default 24; the template holds at most 36)")
     ap.add_argument("--work", default="work")
     ap.add_argument("--exclude-accounts", action="append", metavar="IDS",
-                    help="Salesforce account IDs (18 characters) to leave out of bookings and pipeline; comma separated, repeatable. Default: none (every account)")
+                    help="Salesforce account IDs (18 characters) to leave out of ARR, customers, bookings and pipeline, on top of the internal test accounts in config/scope.json; comma separated, repeatable")
     ap.add_argument("--exclude-accounts-file", action="append", metavar="FILE", help="a text file of account IDs to exclude (one or more per line, '#' comments)")
     ap.add_argument("--scope", default=os.path.join(SKILL, "config", "scope.json"))
     a = ap.parse_args()
@@ -247,17 +248,25 @@ def main():
     if last >= today.replace(day=1):
         refuse(f"{as_of} has not closed yet (today is {today.isoformat()}); pick a closed month")
     first = add_months(last, -(a.months - 1))
-    accounts = parse_accounts(a.exclude_accounts, a.exclude_accounts_file)
-    if not scope.get("hosting_accounts") or not all(re.fullmatch(r"[0-9]{4,6}", x) for x in scope["hosting_accounts"]):
-        refuse("config/scope.json hosting_accounts must list the hosting account numbers (digits only)")
-    qs = build_queries(scope["database"], scope["schema"], first, last, scope["exclude_subsidiaries"], scope["rollup_keys"], scope["pl_l6_kept_under_l5"], accounts, scope["hosting_accounts"])
+    default_accounts = list(scope.get("exclude_accounts") or [])
+    bad_default = [x for x in default_accounts if not SF_ID.match(str(x))]
+    if bad_default:
+        refuse(f"config/scope.json exclude_accounts holds IDs that are not 18-character Salesforce account IDs: {', '.join(map(str, bad_default))}")
+    requested = parse_accounts(a.exclude_accounts, a.exclude_accounts_file)
+    accounts = list(dict.fromkeys(default_accounts + requested))      # standing test accounts first, then the request
+    drawn_account = str(scope.get("revolver_drawn_account") or "")
+    if not re.fullmatch(r"[0-9]{3,12}", drawn_account):
+        refuse(f"config/scope.json revolver_drawn_account {drawn_account!r} is not an account number")
+    qs = build_queries(scope["database"], scope["schema"], first, last, scope["exclude_subsidiaries"], scope["rollup_keys"], scope["pl_l6_kept_under_l5"], accounts, drawn_account)
     qdir = os.path.join(a.work, "queries")
     os.makedirs(qdir, exist_ok=True)
     os.makedirs(os.path.join(a.work, "raw"), exist_ok=True)
     manifest = {"as_of": as_of, "months": a.months, "first_month": first.strftime("%Y-%m"), "arr_basis": ARR_BASIS,
                 "scope": {"exclude_subsidiaries": scope["exclude_subsidiaries"], "exclude_accounts": accounts,
+                          "exclude_accounts_default": default_accounts, "exclude_accounts_requested": [x for x in requested if x not in default_accounts],
                           "database": scope["database"], "schema": scope["schema"],
-                          "revolver_note": "FINANCE_ANALYTICS REVOLVER has no subsidiary dimension: the revolver query covers the facility as Finance maintains it and is never subsidiary-filtered"},
+                          "revolver": "FINANCE_ANALYTICS REVOLVER (Finance's manual table) has no subsidiary dimension: never filtered by subsidiary",
+                          "revolver_drawn_account": drawn_account},
                 "mode": "governed", "created": dt.datetime.now().isoformat(timespec="seconds"), "queries": {}}
     for name in ORDER:
         sql = qs[name]
@@ -272,7 +281,7 @@ def main():
     with open(os.path.join(qdir, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2)
     print(json.dumps({"status": "WRITTEN", "as_of": as_of, "window": [first.strftime("%Y-%m"), as_of], "arr_basis": ARR_BASIS,
-                      "excluded_accounts": len(accounts),
+                      "excluded_accounts": len(accounts), "excluded_accounts_default": len(default_accounts),
                       "queries": [manifest["queries"][n]["sql"] for n in ORDER], "save_results_to": os.path.join(a.work, "raw", "<name>.json"),
                       "next": "run each .sql file verbatim with sql-exec; save each full result to work/raw/<name>.json; then build_chronograph.py"}, indent=2))
     return 0

@@ -1,0 +1,12 @@
+{
+  "_comment": "Kantata's internal test accounts. Every ARR_ANALYTICS query leaves them out, in every run, with one null-safe filter on CUSTOMER.ACCOUNT_ID (both ARR_BRIDGE and CUSTOMER_BRIDGE join to CUSTOMER). Matched by 18-character Salesforce account ID only, never by name: real customers whose names contain 'test' stay in. Same list as the CFO Chronograph's config/scope.json exclude_accounts. Changing it is skill-owner work.",
+  "column": "CUSTOMER.ACCOUNT_ID",
+  "account_ids": [
+    "0010Z000023uvjkQAA",
+    "0013r00002nUO7SAAW",
+    "0013r00002nUOBtAAO",
+    "0013r00002fqSchAAE",
+    "0013r00002fpJz4AAE"
+  ],
+  "verified": "2026-11-24 against PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS: all five IDs found; ending ARR Sep-26 111,047,073.93 -> 110,552,011.64 and Oct-26 112,173,528.37 -> 111,712,666.08 with the filter; accounts whose names contain 'test' but are not listed are kept"
+}

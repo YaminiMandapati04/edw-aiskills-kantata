@@ -53,6 +53,8 @@ For explanations in a chat answer: arithmetic attribution is allowed ("EBITDA is
 
 ## 5. Sensitive data
 
+- **Internal test accounts are always excluded**, by the Salesforce account IDs in `config/excluded_accounts.json` (`scripts/account_scope.py`), never by name: real customers whose names contain "test" stay in. A request for "everything" or "the view's raw total" does not lift it; changing the list is skill-owner work.
+
 - Return the minimum needed to answer. Aggregate first; drill only where the question asks.
 - Cap row-level output (default 100 rows; the registry may set a different cap) and say when you did.
 - Customer names appear in booking and opportunity drills because the question needs them; apply the row cap, and keep named-customer detail out of shared dashboards unless asked.
@@ -88,6 +90,7 @@ Chat, workbook, dashboard and charts are copies of the same result bundle. Build
 - [ ] Query passed `sql_guard.py`; only the three semantic views used (no raw tables)
 - [ ] Request checked against the registry's "cannot be answered" list; proxies labelled derived
 - [ ] Right layer and window column; currency basis named; data's latest date vs today noted if they differ
+- [ ] Every ARR_ANALYTICS query carries the test-account exclusion and passed `account_scope.py check`
 - [ ] Period, comparison and filters stated
 - [ ] Units/scale and sign convention consistent with the registry
 - [ ] Governed vs derived vs scenario labelled

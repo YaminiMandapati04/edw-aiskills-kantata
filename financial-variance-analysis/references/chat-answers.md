@@ -67,16 +67,11 @@ The content always comes in this order:
 - If a check fails, say so first, before any analysis: "Components do not foot to the reported total; reconciliation is required before interpretation."
 - On the bundle path, the answer passes `bundle.py --check-text` (`output-formats.md` §9).
 
-## Data notes (Yes Energy)
+## Data notes (Kantata)
 
-- The fiscal year is the calendar year (January to December); quarter to date and year to date are calendar quarters and years. Build every window from the monthly `_MTD` figures. Never quote the view's own `_QTD` / `_YTD` / `_LTM` metrics: each is tagged to one month's account keys, so they are incomplete.
-- P&L values are stored unsigned and are signed by `P_AND_L_MULTIPLIER`.
-- **Manual adjustments are part of the governed figures; never exclude them, always name them.** `INCOME_STATEMENT.ADJUSTMENT_TYPE` is NULL on ordinary actuals and budget and carries three adjustment types:
-  - **i. Pro forma**: `Pro Forma Actuals` (actuals of acquired businesses before they joined the ledger, on ordinary accounts with a subsidiary: revenue, COGS, opex and below EBITDA) and `Pro Forma Adjustments` (pro forma reclasses between cost lines, close to nil in total).
-  - **ii. Capitalised expenses and their reversal** (`Adjustment for Capitalized expenses`, no subsidiary): `-8001` **Capitalised Software** (in Fully loaded R&D) and `-8002` **Capitalised Commissions** (in Fully loaded S&M) charge the capitalised cost inside Adjusted EBITDA; `-8003` **Reversal of Capitalised Portions** (L4 `Reversal of Capitalized Portions`, below EBITDA) reverses it. The pair moves Adjusted EBITDA (lower) and nets to zero at net income. The 2026 budget carries the capitalisation on the same keys with no adjustment type.
-  - Say which adjustments are in the window and their effect on revenue, Adjusted EBITDA and net income (`GROUP BY INCOME_STATEMENT.ADJUSTMENT_TYPE`). A movement on `-8001` / `-8002` / `-8003` is an accounting treatment, never a cost saving, overspend or operating improvement. PF Adjusted EBITDA (`PF_ADJUSTED_EBITDA_MTD`, key `-19`) equals Adjusted EBITDA in PROD today; quote it only when asked.
-  - The balance-sheet and cash-flow marts already exclude all three adjustment types.
-- **Use the GL memo for the "why".** Before writing the why block, drill the main driver's accounts to `TRANSACTIONS_AND_ADJUSTMENTS.MEMO` (`query-playbook.md` §4) and say what the postings were in accounting words (an accrual and its reversal, a bonus true-up, hosting fees, a capitalisation entry). Never quote a memo, a name or a document number. Manual adjustment rows have no memo, so describe them by their adjustment type and account. A movement with no memo is "Reason not established in the data".
+- The fiscal year runs 1 February to 31 January (FY2027 = Feb 2026 to Jan 2027), and quarter-to-date and year-to-date are fiscal. Build every window from the monthly `_MTD` figures. Never quote the view's own `_QTD` / `_YTD` / `_LTM` metrics: they are calendar-based, and each is tagged to one month's account keys, so they are incomplete.
+- P&L values are stored unsigned and are signed by `P_AND_L_MULTIPLIER`. The group adjustments (Amortization, Taxation) have no subsidiary and sit below EBITDA.
+- There are no pro forma adjustments.
 - If the latest month is partial or a one-off distorts the comparison, say so in one sentence in the first paragraph.
 
 ## Example

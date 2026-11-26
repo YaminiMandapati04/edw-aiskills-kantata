@@ -158,28 +158,6 @@ def _trend_pack(p, L, drivers):
             "drivers": {d["id"]: row(drv(d["id"])) for d in drivers}}
 
 
-def adj_pack(L, LP, cite):
-    """The manual adjustments in the lens window (pro forma; capitalised software and commissions with their reversal),
-    each impact cited, so the summary and readout can say which adjustments are included and what they did."""
-    A = L.get("adjustments") or {}
-    if not A.get("available"):
-        return {"available": False, "reason": A.get("reason")}
-    out = []
-    for x in A["types"]:
-        tp = f"{LP}.adjustments.types[{x['id']}]"
-        a, c = x["actual"] or {}, x["comparator"] or {}
-        out.append({"id": x["id"], "label": x["label"], "class": x["class"], "class_label": x["class_label"],
-                    "revenue": cite(f"{tp}.actual.rev", a.get("rev")) if a else None,
-                    "ebitda": cite(f"{tp}.actual.ebitda", a.get("ebitda")) if a else None,
-                    "net_income": cite(f"{tp}.actual.ni", a.get("ni")) if a else None,
-                    "components": [{"label": k["label"], "amount": cite(f"{tp}.actual.components[{k['id']}].amount", k["amount"])} for k in a.get("components", [])],
-                    "comparator_ebitda": cite(f"{tp}.comparator.ebitda", c.get("ebitda")) if c else None,
-                    "ebitda_variance": cite(f"{tp}.ebitda_variance", x.get("ebitda_variance")) if x.get("ebitda_variance") is not None else None})
-    return {"available": True, "types": out, "total_ebitda_impact": cite(f"{LP}.adjustments.total_ebitda_impact", A["total_ebitda_impact"]),
-            "ebitda_excluding_adjustments": cite(f"{LP}.adjustments.ebitda_excluding_adjustments", A.get("ebitda_excluding_adjustments")),
-            "basis_note": A.get("basis_note"), "rule": A.get("rule")}
-
-
 def summary_pack(p, L, LP, cite):
     """The figures a writer may use in the executive summary, each with its source path, plus the rules the gate applies."""
     ln = {x["id"]: x for x in L["lines"]}
@@ -237,7 +215,6 @@ def summary_pack(p, L, LP, cite):
                            "drivers": {d["id"]: memo_for(p, L, LP, "drivers", d["id"], 4) for d in drv[:5]},
                            "restricted_terms": (p.get("memos") or {}).get("restricted_terms"), "rules": MEMO_RULES}
                           if (L.get("memo_evidence") or {}).get("available") else {"available": False, "reason": (L.get("memo_evidence") or p.get("memos") or {}).get("reason")}),
-        "adjustments": adj_pack(L, LP, cite),
         "rules": SUMMARY_RULES,
         "shape": {"bullets": [{"id": "lead", "role": "headline", "tone": "favourable|unfavourable|neutral|outlook", "head": "Bold lead, no figures.", "text": "One line, no figures: where net income stands, what drives it, what it means.", "detail": "The full sentence with registered figures, then what it means.",
                                "numbers": [{"display": "$275k", "value": 274616.72, "kind": "money", "source": f"{LP}.lines[ni].variance"}], "drill": {"level": "line", "ids": ["ni"]}, "claim": "below_line_led"},
@@ -271,10 +248,6 @@ def main():
         out["qc"] = p["qc"]; out["sign_convention"] = p["meta"]["sign_convention"]; out["materiality"] = p["meta"]["materiality"]; out["capabilities"] = p["capabilities"]
     elif a.op == "outlook":
         out["outlook"] = p["outlook"]
-    elif a.op == "adjustments":
-        key, L = lens_of(p, a.lens)
-        out["lens"] = key
-        out["adjustments"] = adj_pack(L, f"lenses[{key}]", cite)
     else:
         key, L = lens_of(p, a.lens)
         LP = f"lenses[{key}]"
@@ -301,7 +274,6 @@ def main():
                               "causal_gap": i["causal_gap"], "numbers": i["numbers"]} for i in L["insights"][:a.top]],
                 "actions": [{"id": x["id"], "rank": x["rank"], "subject_ref": x["subject_ref"], "category": x["category"], "rule": x["rule"], "short": x["short"], "question": x["question"],
                              "owner": x["owner"], "date": x["date"], "exposure": x["exposure"], "forecast": x["forecast"]} for x in L["actions"]],
-                "adjustments": adj_pack(L, LP, cite),
                 "executive_tier_drivers_needing_a_finding": [d["id"] for d in L["drivers"] if d["tier"] == "executive"],
                 "gl_memos": {"available": bool((L.get("memo_evidence") or {}).get("available")), "basis": (L.get("memo_evidence") or {}).get("basis"),
                              "read_with": f"finance_brief.py PAYLOAD memos --lens {key} [--id <driver or account>]; `driver` and `account` carry them too",

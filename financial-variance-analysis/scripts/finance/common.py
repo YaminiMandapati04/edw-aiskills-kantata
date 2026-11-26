@@ -75,8 +75,7 @@ def month_end(d):
 
 def fiscal_period(d, start_month=1):
     """(fiscal year, fiscal quarter) of the month of d, for a fiscal year starting in start_month and named by the
-    calendar year it ends in. Yes Energy uses start_month 1 (calendar year: Jan 2026 is FY2026 Q1); with start_month 2,
-    Feb 2026 would be FY2027 Q1."""
+    calendar year it ends in: with start_month 2, Feb 2026 is FY2027 Q1 and Jan 2027 is FY2027 Q4."""
     k = (d.month - start_month) % 12
     return d.year + (1 if start_month > 1 and d.month >= start_month else 0), k // 3 + 1
 

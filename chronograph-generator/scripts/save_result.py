@@ -18,7 +18,7 @@ import os
 import shutil
 import sys
 
-NAMES = ("pl", "pl_governed", "bs", "cf", "arr", "customers", "bookings", "pipeline", "hosting", "revolver")
+NAMES = ("pl", "pl_governed", "bs", "cf", "arr", "customers", "bookings", "pipeline", "revolver", "revolver_drawn")
 
 
 def refuse(msg):

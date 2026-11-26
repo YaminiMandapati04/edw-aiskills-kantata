@@ -5,8 +5,8 @@
 
 Reads <work>/queries/manifest.json (written by chronograph_queries.py) and the ten saved sql-exec results in
 <work>/raw/, fills the template's Actual sheet with one column per month of the window, and writes
-<out>/yes_energy_chronograph_<YYYY-MM>.xlsx, named for the as-of month (yes_energy_chronograph_<YYYY-MM>_SYNTHETIC.xlsx
-for test data; a rerun for the same month rewrites that file) plus <work>/chronograph_report.json.
+<out>/chronograph.xlsx (chronograph_SYNTHETIC.xlsx for test data; no month in the name, so a scheduled run
+rewrites the same file) plus <work>/chronograph_report.json.
 
 Deterministic, and fail-closed:
 - Every labelled template row must be in assets/chronograph_map.json and every map row in the template; the template
@@ -14,16 +14,22 @@ Deterministic, and fail-closed:
 - P&L (FINANCE_ANALYTICS): signed with the view's P_AND_L_MULTIPLIER (revenue positive, costs negative). A row reads
   the deepest COA level whose name matches (L6, L5, L4, L3, L2); a group's Other row is the line total less the rows
   named. Every view line with activity must land in a row. Balance sheet and cash flow read the view as stored. ARR
-  and customer bridges (ARR_ANALYTICS) and bookings and pipeline (GTM_ANALYTICS) read the governed metrics. Rows no
-  view carries (headcount, revolver, payments) are left blank, never 0.
+  and customer bridges (ARR_ANALYTICS; customers as LTM counts) and bookings and pipeline (GTM_ANALYTICS) read the
+  governed metrics. Revolver Size reads Finance's manual REVOLVER table (FINANCE_ANALYTICS); Drawn Revolver is the
+  balance sheet MTD value of the revolver account (280360); a stored 0 is written as 0, a missing month is refused.
+  Principal Payments reads the REVOLVER table's Principal Payments METRIC (blank until Finance adds it).
+- Cash flow is mapped strictly: every row reads only rows the view labels (CASH_FLOW_L1..L3); rows without a
+  cash-flow label are placed nowhere and reported. Cash before Financing, Net Cash Flow, Beginning and Ending Cash
+  read the view's own labels. Rows no view carries (headcount, payments) are left blank, never 0.
 - The template enters costs and outflows as positive amounts and subtracts them in its formulas. Rows marked
   'negate' in the map (P&L costs, working-capital change, investing outflows, churn, downsell, lost customers) are
   written with the view's sign reversed; every calculation and gate inside the build uses the view's own sign.
 - Template formulas stay formulas, copied to every month; three template formula errors are corrected (map 'override').
 - Gates (the sheet's own formulas are evaluated as Excel will): Total Revenue, Adjusted EBITDA and Net Income tie to the
-  governed roll-ups; the balance sheet balances (A = L + E is 0); cash ties to the cash flow's ending cash; Net Cash Flow, Cash before
-  Financing, Beginning and Ending Cash tie; the ARR bridge's GDR, NDR (+ FX) and Ending ARR tie to the view; Ending Customers
-  ties; Recurring and Total Bookings tie. Tolerance $1 (0 for counts). Any failure refuses the file.
+  governed roll-ups; the balance sheet balances; cash ties to the cash flow's ending cash; the view's Cash before
+  Financing equals the operating and investing lines; Ending Cash = Beginning Cash + Net Cash Flow + FX Change; the ARR bridge's GDR, NDR and Ending ARR tie to the view; Ending Customers
+  ties; Recurring and Total Bookings tie; Drawn Revolver does not exceed Revolver Size. Tolerance $1 (0 for counts).
+  Any failure refuses the file.
 - The workbook is sanitised (no defined names, external links or stale views) and checked with check_workbook.py,
   including a hidden-Excel open test on Windows; a file Excel would repair is refused.
 Exit codes: 0 written, 1 refused.
@@ -35,7 +41,6 @@ import datetime as dt
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 
@@ -46,7 +51,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import check_workbook                                   # noqa: E402
-import fetch_template                                   # noqa: E402
 from clean_template import sanitize, sha256             # noqa: E402
 
 TEMPLATE = os.path.join(SKILL, "assets", "chronograph_template.xlsx")
@@ -54,6 +58,8 @@ MAP = os.path.join(SKILL, "assets", "chronograph_map.json")
 BS_SECTIONS = ("assets", "total liabilities share holder equity")
 CF_LABELS = ("beginning cash", "ending cash", "net cash flow", "cash before financing")
 TEXT_SECTIONS = {"pl": "P&L", "bs": "balance sheet", "cf": "cash flow"}
+CUSTOMER_LTM_NOTE = ("LTM: measured against the customer count 12 months earlier (ARR_ANALYTICS CUSTOMER_BRIDGE.TOTAL_LTM). "
+                     "Beginning Customers is the count 12 months back, so it does not equal the prior month's Ending.")
 
 
 class Refused(Exception):
@@ -226,9 +232,9 @@ def pl_sign(r):
 
 
 def relabel_cash_flow(rows, rules, months):
-    """Give the cash-flow rows the view leaves without a cash-flow label the label the map's cf_unlabelled rules assign
-    (matched on their COA levels). An unlabelled row with activity that no rule matches is refused: nothing is dropped."""
-    out, unknown, used = [], set(), {}
+    """Strict mapping: rows the view leaves without a cash-flow label are placed in no line unless a map cf_unlabelled
+    rule says so (none today). Unplaced rows with activity are returned with their monthly amounts and reported."""
+    out, unknown, used, unplaced = [], set(), {}, {}
     for r in rows:
         if norm(r.get("CASH_FLOW_L1")) or month_label(r["PERIOD_START_DATE"]) not in months:
             out.append(r)
@@ -237,7 +243,10 @@ def relabel_cash_flow(rows, rules, months):
         rule = next((u for u in rules if all(norm(r.get(k)) == norm(w) for k, w in u["when"].items())), None)
         if rule is None:
             if v not in (None, 0.0):
-                unknown.add(f"{r.get('COA_MAPPING_L1') or '(no COA L1)'} > {r.get('COA_MAPPING_L3') or '(no COA L3)'}")
+                path = f"{r.get('COA_MAPPING_L1') or '(no COA L1)'} > {r.get('COA_MAPPING_L3') or '(no COA L3)'}"
+                unknown.add(path)
+                mo = month_label(r["PERIOD_START_DATE"])
+                unplaced[mo] = r2((unplaced.get(mo) or 0.0) + v)
             continue
         q = dict(r)
         q["CASH_FLOW_L1"], q["CASH_FLOW_L2"], q["CASH_FLOW_L3"] = rule["as"]
@@ -245,10 +254,7 @@ def relabel_cash_flow(rows, rules, months):
         if v not in (None, 0.0):
             u = used.setdefault(rule["as"][-1], {"placed_in": rule["as"][-1], "why": rule.get("why"), "months": {}})
             u["months"][month_label(r["PERIOD_START_DATE"])] = r2((u["months"].get(month_label(r["PERIOD_START_DATE"])) or 0.0) + v)
-    if unknown:
-        raise Refused("cash-flow rows without a cash-flow label carry activity and no cf_unlabelled rule in the map places them",
-                      unlabelled=sorted(unknown))
-    return out, list(used.values())
+    return out, list(used.values()), {"paths": sorted(unknown), "months": unplaced}
 
 
 def closed_check(gov, pl, months):
@@ -452,11 +458,6 @@ def build(args):
         man = json.load(fh)
     with open(args.map, encoding="utf-8") as fh:
         mp = json.load(fh)
-    if args.template == TEMPLATE and not os.path.exists(TEMPLATE):
-        try:
-            fetch_template.fetch()
-        except RuntimeError as exc:
-            raise Refused(f"template is missing and could not be fetched from the stage: {exc}")
     if sha256(args.template) != mp["template_sha256"]:
         raise Refused(f"{os.path.basename(args.template)} does not match the map's template_sha256: a changed template needs clean_template.py and a map review")
     y, m = int(man["first_month"][:4]), int(man["first_month"][5:7])
@@ -481,7 +482,7 @@ def build(args):
     if stray:
         raise Refused(f"balance sheet lines outside Assets and Liabilities & Equity carry balances: {', '.join(map(str, stray))}")
     bs = Lines("bs", bs_rows, ["COA_MAPPING_L1", "COA_MAPPING_L2", "COA_MAPPING_L3", "COA_MAPPING_L4"], "ENDING_BALANCE_CONVERTED", "PERIOD_START_DATE", months)
-    cf_all, relabelled = relabel_cash_flow(res["cf"], mp.get("cf_unlabelled", []), months)
+    cf_all, relabelled, unplaced = relabel_cash_flow(res["cf"], mp.get("cf_unlabelled", []), months)
     cf = Lines("cf", [r for r in cf_all if norm(r["CASH_FLOW_L1"]) not in CF_LABELS], ["CASH_FLOW_L1", "CASH_FLOW_L2", "CASH_FLOW_L3"], "TOTAL_MTD", "PERIOD_START_DATE", months)
     cf_lab = Lines("cf_label", [r for r in cf_all if norm(r["CASH_FLOW_L1"]) in CF_LABELS], ["CASH_FLOW_L1", "CASH_FLOW_L2", "CASH_FLOW_L3"], "TOTAL_MTD", "PERIOD_START_DATE", months)
     for name, lines in (("pl", pl), ("bs", bs), ("cf", cf)):
@@ -494,20 +495,25 @@ def build(args):
     require_months("arr (ARR bridge)", arr, months)
     cust = keyed(res["customers"], "MONTH_END_DATE", months, key_col="CATEGORY", value_cols=["TOTAL_LTM"])
     require_months("customers (customer bridge)", cust, months)
-    # revolver: Finance-maintained, one row per METRIC x month; METRICs are separate measures, never added together
-    rev_metrics = mp.get("revolver_metrics", [])
+    # revolver: Finance's manual table, one METRIC per template row; separate measures, never added across METRIC
+    rev_metrics = sorted({e["metric"] for e in mp["rows"].values() if e.get("src") == "revolver"})
+    rev_rows = keyed(res["revolver"], "MONTH_START_DATE", months, key_col="METRIC", value_cols=["REVOLVER_AMOUNT"])
+    odd_rev = sorted({k for mo in rev_rows.values() for k in mo if k not in rev_metrics})
+    if odd_rev:
+        raise Refused(f"the REVOLVER table carries METRIC values the template has no row for: {', '.join(map(str, odd_rev))}")
+    rev_optional = {e["metric"] for e in mp["rows"].values() if e.get("src") == "revolver" and e.get("optional")}
     rev = {}
-    for r in res["revolver"]:
-        mo = month_label(r["MONTH_START_DATE"])
-        if mo not in months:
-            continue
-        if r["METRIC"] not in rev_metrics:
-            raise Refused(f"FINANCE_ANALYTICS REVOLVER carries METRIC {r['METRIC']!r}, which no row of the template holds")
-        if (r["METRIC"], mo) in rev:
-            raise Refused(f"duplicate REVOLVER METRIC {r['METRIC']!r} for {mo}")
-        rev[(r["METRIC"], mo)] = num(r["AMOUNT"])
-    for met in rev_metrics:
-        require_months(f"revolver ({met})", {mo for (k, mo), v in rev.items() if k == met and v is not None}, months)
+    for metric in rev_metrics:
+        rev[metric] = {mo: ((rev_rows.get(mo) or {}).get(metric) or {}).get("REVOLVER_AMOUNT") for mo in months}
+        have = {mo for mo, v in rev[metric].items() if v is not None}
+        if metric in rev_optional and not have:
+            continue                                                # not in the table yet: the row stays blank (reported)
+        require_months(f"revolver ({metric})", have, months)
+    # Drawn Revolver: the balance sheet month-end balance of the revolver account
+    drawn_rows = keyed(res["revolver_drawn"], "PERIOD_START_DATE", months, value_cols=["ENDING_BALANCE_CONVERTED"])
+    drawn = {mo: (drawn_rows.get(mo) or {}).get("ENDING_BALANCE_CONVERTED") for mo in months}
+    require_months(f"revolver_drawn (balance sheet account {man['scope'].get('revolver_drawn_account', '280360')})",
+                   {mo for mo, v in drawn.items() if v is not None}, months)
     bkg_cols = q["bookings"]["columns"][1:]
     bkg = keyed(res["bookings"], "AS_OF_DATE", months, month_end_only=True, value_cols=bkg_cols)
     require_months("bookings", bkg, months)
@@ -519,15 +525,6 @@ def build(args):
         require_months("pipeline", ppl, months)
     for m in ppl_missing:
         ppl[m] = {c: None for c in ppl_cols}
-    # hosting: the hosting accounts (scope.json) split by COA L3, signed by P_AND_L_MULTIPLIER like the P&L. A month the
-    # result carries has 0 for a bucket with no lines; a month it does not carry stays blank.
-    hosting = {}
-    host_months = {month_label(r["PERIOD_START_DATE"]) for r in res["hosting"]}
-    for r in res["hosting"]:
-        mo = month_label(r["PERIOD_START_DATE"])
-        if mo in months:
-            k = (str(r["BUCKET"]), mo)
-            hosting[k] = hosting.get(k, 0.0) + (num(r["TOTAL_MTD"]) or 0.0) * pl_sign(r)
     known_arr = set(mp["arr_categories"])
     odd = sorted({c for mo in arr.values() for c, v in mo.items() if c not in known_arr and any(x not in (None, 0.0) for x in v.values())})
     if odd:
@@ -651,7 +648,7 @@ def build(args):
         elif src == "cf_label":
             series, origin = cf_lab.take(e["line"])
         elif src == "arr":
-            series, origin = cat(arr, e["category"], mtd_col), f"ARR_WATERFALL {e['category']} ({mtd_col})"
+            series, origin = cat(arr, e["category"], mtd_col), f"ARR_BRIDGE {e['category']} ({mtd_col})"
         elif src == "arr_rate":
             num_s = [cat(arr, n, ltm_col) for n in e["numerator"]]
             den = cat(arr, e["denominator"], ltm_col)
@@ -661,25 +658,25 @@ def build(args):
                 series[mo] = None if (den[mo] in (None, 0.0) or any(p is None for p in parts)) else sum(parts) / den[mo]
             origin, kind = f"derived: ({' + '.join(e['numerator'])}) / {e['denominator']}, LTM ({ltm_col})", "ratio"
             report["derived"].append({"row": key, "formula": origin, "why": e.get("why")})
-        elif src == "customers":
-            series, origin, kind = cat(cust, e["category"], "TOTAL_LTM"), f"CUSTOMER_BRIDGE {e['category']} (LTM)", "count"
         elif src == "customer_rate":
+            # LTM customer counts in the view's sign (Lost is negative): (Beginning + Lost) / Beginning; blank, never 0, without a denominator
             num_s = [cat(cust, n, "TOTAL_LTM") for n in e["numerator"]]
             den = cat(cust, e["denominator"], "TOTAL_LTM")
             series = {}
             for mo in months:
                 parts = [s[mo] for s in num_s]
                 series[mo] = None if (den[mo] in (None, 0.0) or any(p is None for p in parts)) else sum(parts) / den[mo]
-            origin, kind = f"derived: ({' + '.join(e['numerator'])}) / {e['denominator']}, CUSTOMER_BRIDGE LTM", "ratio"
+            origin, kind = f"derived: ({' + '.join(e['numerator'])}) / {e['denominator']}, LTM customer counts (TOTAL_LTM)", "ratio"
             report["derived"].append({"row": key, "formula": origin, "why": e.get("why")})
+        elif src == "customers":
+            series, origin, kind = cat(cust, e["category"], "TOTAL_LTM"), f"CUSTOMER_BRIDGE {e['category']} (LTM)", "count"
         elif src == "revolver":
-            # a stored 0 is Finance's figure and is written; a missing month was refused above
-            series, origin = {mo: rev[(e["metric"], mo)] for mo in months}, f"REVOLVER {e['metric']}"
+            series, origin = dict(rev[e["metric"]]), f"REVOLVER {e['metric']} (REVOLVER_AMOUNT)"
+        elif src == "revolver_drawn":
+            series = dict(drawn)
+            origin = f"BALANCE_SHEET.ENDING_BALANCE_CONVERTED, ACCOUNT_NUMBER {man['scope'].get('revolver_drawn_account', '280360')}"
         elif src == "bookings":
             series, origin = {mo: bkg[mo][e["metric"]] for mo in months}, f"BOOKINGS_OVERVIEW.{e['metric']}"
-        elif src == "hosting":
-            series = {mo: (hosting.get((e["bucket"], mo), 0.0) if mo in host_months else None) for mo in months}
-            origin = f"hosting accounts {', '.join(e.get('accounts_label', []) or ['(scope.json)'])}, bucket {e['bucket']}"
         elif src == "pipeline":
             series, origin = {mo: ppl[mo][e["metric"]] for mo in months}, f"PIPELINE_OVERVIEW.{e['metric']}"
             kind = "ratio" if "RATIO" in e["metric"] else "amt"
@@ -688,7 +685,7 @@ def build(args):
         if e.get("blank_if_all_zero") and series and all(v in (None, 0.0) for v in series.values()):
             confirm.append({"item": key, "detail": f"{origin} is 0 in every month of the window; the row is left blank. {e.get('zero_reason', '')}".strip()})
             series = None
-        if e.get("negate") and src not in ("pl", "bs", "cf", "arr", "customers", "hosting"):
+        if e.get("negate") and src not in ("pl", "bs", "cf", "arr", "customers"):
             raise Refused(f"{key}: 'negate' is only for amounts read from a view line or bridge category")
         out = as_shown(e, series)
         if hf:
@@ -699,7 +696,7 @@ def build(args):
         values[key] = series
         shown[key] = out
         if series is None or all(v is None for v in series.values()):
-            report["blank"].append({"row": key, "reason": e.get("zero_reason") if e.get("blank_if_all_zero") else f"{e.get('line') or e.get('category') or e.get('metric')} is not in the view"})
+            report["blank"].append({"row": key, "reason": e.get("zero_reason") if e.get("blank_if_all_zero") else (e.get("reason") or f"{e.get('line') or e.get('category') or e.get('metric')} is not in the view")})
         else:
             report["filled"].append({"row": key, "from": origin, "months_with_values": sum(1 for v in series.values() if v is not None)})
 
@@ -748,8 +745,13 @@ def build(args):
         if e.get("format"):
             for c in cols:
                 ws.cell(r, c).number_format = e["format"]
-        note = e.get("note") or (f"Derived from ARR_ANALYTICS ({man['arr_basis']}), not a governed metric. {e.get('why', '')}" if e.get("src") == "arr_rate"
-                                 else "Derived from ARR_ANALYTICS CUSTOMER_BRIDGE LTM counts, not a governed metric. (Beginning - Lost) / Beginning, LTM." if e.get("src") == "customer_rate" else None)
+        note = e.get("note")
+        if not note and e.get("src") == "arr_rate":
+            note = f"Derived from ARR_ANALYTICS ({man['arr_basis']}), not a governed metric. {e.get('why', '')}"
+        elif not note and e.get("src") == "customer_rate":
+            note = "Derived from ARR_ANALYTICS CUSTOMER_BRIDGE LTM counts, not a governed metric. (Beginning - Lost) / Beginning, LTM."
+        elif not note and key.startswith("Customer Bridge | "):
+            note = CUSTOMER_LTM_NOTE
         if note:
             ws.cell(r, lc).comment = Comment(note, "CFO Chronograph refresh")
             notes_written += 1
@@ -788,18 +790,21 @@ def build(args):
         "pl_governed": lambda col: {mo: gov[mo][col] for mo in months},
         "cf_label": lambda name: cf_lab.series(cf_lab.lookup(name)[1]) if cf_lab.lookup(name) else {mo: None for mo in months},
         "cf": lambda name: cf.series(cf.lookup(name)[1]) if cf.lookup(name) else {mo: None for mo in months},
-        # a list of categories is summed: NDR is checked against Net Dollar Retention + FX, because the sheet carries
-        # FX in the (Transactional) downsell row inside its NDR formula, while the view adds FX only after NDR
-        "arr": lambda *names: {mo: (None if any(cat(arr, n, mtd_col)[mo] is None for n in names) else sum(cat(arr, n, mtd_col)[mo] for n in names)) for mo in months},
+        "arr": lambda name: cat(arr, name, mtd_col),
         "customers": lambda name: cat(cust, name, "TOTAL_LTM"),
+        "revolver": lambda metric: rev[metric],
         "bookings": lambda col: {mo: bkg[mo][col] for mo in months},
         "zero": lambda *_: {mo: 0.0 for mo in months},
+        # other sheet rows as Excel calculates them (a leading '-' subtracts the row), in dollars
+        "sheet_sum": lambda *names: {mo: sum((-1.0 if n.startswith("-") else 1.0) * ev.value(f"{col_letter(cols[j])}{rows[n.lstrip('-')]}") * unit(rows[n.lstrip('-')])
+                                             for n in names) for j, mo in enumerate(months)},
     }
     checks, failed, info = [], [], []
     for chk in mp["checks"]:
         r = rows[chk["row"]]
         ref = refs[chk["against"][0]](*chk["against"][1:])
         blocking = chk.get("blocking", True)
+        lte = chk.get("compare") == "lte"                           # the row must not exceed the reference (Drawn <= Size)
         diffs = []
         for j, c in enumerate(cols):
             mine = ev.value(f"{col_letter(c)}{r}") * unit(r)
@@ -810,22 +815,19 @@ def build(args):
                 continue
             d = mine - theirs
             rec = {"row": chk["row"], "month": months[j], "sheet": r2(mine), "view": r2(theirs), "difference": r2(d)}
+            if lte:
+                rec["rule"] = f"must not exceed {'.'.join(chk['against'][1:])}"
+            off = (d if lte else abs(d)) > chk.get("tolerance", tol) + 1e-9
             if not blocking:
-                if abs(d) > chk.get("tolerance", tol) + 1e-9:
+                if off:
                     diffs.append(rec)
                 continue
             checks.append(rec)
-            if abs(d) > chk.get("tolerance", tol) + 1e-9:
+            if off:
                 failed.append(rec)
         if not blocking:
             info.append({"row": chk["row"], "against": ".".join(chk["against"]), "explain": chk.get("explain"),
                          "months_different": len(diffs), "differences": [{k: d[k] for k in ("month", "sheet", "view", "difference")} for d in diffs]})
-    for lim in mp.get("limit_checks", []):
-        hi, lo = values.get(lim["not_above"]) or {}, values.get(lim["row"]) or {}
-        over = [mo for mo in months if lo.get(mo) is not None and hi.get(mo) is not None and lo[mo] > hi[mo] + 1e-9]
-        for mo in over:
-            failed.append({"row": lim["row"], "month": mo, "sheet": r2(lo[mo]), "view": r2(hi[mo]), "why": lim.get("explain")})
-        checks.extend({"row": lim["row"], "month": mo, "limit": lim["not_above"]} for mo in months if mo not in over)
     if failed:
         by_row = {}
         for f in failed:
@@ -835,6 +837,11 @@ def build(args):
                       first_failures=failed[:8])
 
     # -- items for the view owner: what the build placed or reported rather than took from a labelled, consistent line
+    if unplaced["months"]:
+        confirm.append({"item": "Cash flow | rows without a cash-flow label",
+                        "detail": "FINANCE_ANALYTICS carries these cash-flow rows without a cash-flow label; strict mapping places them in no line. "
+                                  "The view's Net Cash Flow and Ending Cash include them. Rows: " + "; ".join(unplaced["paths"]),
+                        "months": len(unplaced["months"]), "last_month": unplaced["months"].get(months[-1])})
     for u in relabelled:
         confirm.append({"item": f"Cash flow | {u['placed_in']}", "detail": f"rows the view leaves without a cash-flow label were placed here: {u.get('why') or ''}".strip(),
                         "last_month": u["months"].get(months[-1])})
@@ -850,7 +857,8 @@ def build(args):
 
     totals = {k: r2(ev.value(f"{col_letter(cols[-1])}{rows[k]}") * unit(rows[k])) for k in
               ("Profit & Loss | Total Revenue", "Profit & Loss | Adjusted EBITDA", "Profit & Loss | Net Income", "Balance Sheet | Total Assets",
-               "Cash Flow Statement | Ending Cash", "ARR Bridge | Ending ARR", "Customer Bridge | Ending Customers", "Bookings | Total Bookings (ARR + SR)")}
+               "Cash Flow Statement | Ending Cash", "ARR Bridge | Ending ARR", "Customer Bridge | Ending Customers", "Bookings | Total Bookings (ARR + SR)",
+               "Liquidity | $ Revolver Size", "Liquidity | $ Drawn Revolver")}
 
     # -- display: the amounts (already in thousands) with one decimal and US grouping
     scaled_cells = 0
@@ -863,8 +871,9 @@ def build(args):
 
     # -- provenance line, layout, sanitise, save, check
     synthetic = man.get("mode") == "synthetic"
-    accounts = man["scope"].get("exclude_accounts") or []           # opt-in; older manifests carry none
-    acct_note = (f" Excludes {len(accounts)} Salesforce account(s) from recurring bookings and pipeline (ARR, customers and the P&L still include them): {', '.join(accounts)};"
+    accounts = man["scope"].get("exclude_accounts") or []           # the standing test accounts plus any the user named
+    n_default = len(man["scope"].get("exclude_accounts_default") or [])
+    acct_note = (f" Excludes {len(accounts)} Salesforce account(s) ({n_default} internal test account(s) from config/scope.json) from ARR, customers, recurring bookings and pipeline: {', '.join(accounts)};"
                  " the P&L, balance sheet, cash flow and non-recurring bookings still include them." if accounts else "")
     stamp = (f"{'SYNTHETIC TEST DATA - NOT REAL. ' if synthetic else ''}Actuals {months[0]} to {months[-1]} from PROD semantic views FINANCE_ANALYTICS, "
              f"GTM_ANALYTICS and ARR_ANALYTICS (ARR basis: {man['arr_basis']}); excludes {', '.join(man['scope']['exclude_subsidiaries']) or 'no subsidiary'}.{acct_note} "
@@ -889,10 +898,8 @@ def build(args):
     if mp.get("output_title"):
         ws["B1"].value = mp["output_title"]
     os.makedirs(args.out, exist_ok=True)
-    out = os.path.join(args.out, f"yes_energy_chronograph_{man['as_of']}" + ("_SYNTHETIC" if synthetic else "") + ".xlsx")
-    # the workbook is assembled and checked on local disk: a stage-backed folder (the Snowsight /workspace mount)
-    # cannot rewrite a zip in place. Only the finished, checked file is copied to the output folder.
-    fd, tmp = tempfile.mkstemp(prefix=".chrono-", suffix=".xlsx")
+    out = os.path.join(args.out, "chronograph_SYNTHETIC.xlsx" if synthetic else "chronograph.xlsx")
+    fd, tmp = tempfile.mkstemp(dir=os.path.abspath(args.out), prefix=".chrono-", suffix=".xlsx")
     os.close(fd)
     wb.save(tmp)
     try:
@@ -909,18 +916,19 @@ def build(args):
         os.remove(tmp)
         raise Refused("the workbook failed the open check (Excel would repair it, show stale values, or calculate different results)", workbook_check=wbcheck)
     try:
-        shutil.copyfile(tmp, out)
+        os.replace(tmp, out)
     except PermissionError:
-        raise Refused(f"{out} is open (probably in Excel) and cannot be replaced: close it and run the build again")
-    finally:
         os.remove(tmp)
+        raise Refused(f"{out} is open (probably in Excel) and cannot be replaced: close it and run the build again")
     wbcheck["file"] = out
     return {
         "status": "WRITTEN", "out": out, "as_of": man["as_of"], "window": [months[0], months[-1]], "months": len(months),
         "mode": man.get("mode", "governed"), "arr_basis": man["arr_basis"],
-        "scope": {"excluded_subsidiaries": man["scope"]["exclude_subsidiaries"], "note": "ARR_ANALYTICS and GTM pipeline have no subsidiary dimension: all entities as stored",
+        "scope": {"excluded_subsidiaries": man["scope"]["exclude_subsidiaries"], "note": "ARR_ANALYTICS, GTM pipeline and the FINANCE_ANALYTICS revolver have no subsidiary dimension: all entities as stored",
                   "excluded_accounts": accounts,
-                  "excluded_accounts_note": ("left out of recurring bookings and pipeline only: ARR_ANALYTICS keys customers by Yes Energy / RTO Insider ID and FINANCE_ANALYTICS has no Salesforce account, so ARR, customers, the P&L, "
+                  "excluded_accounts_default": man["scope"].get("exclude_accounts_default") or [],
+                  "excluded_accounts_requested": man["scope"].get("exclude_accounts_requested") or [],
+                  "excluded_accounts_note": ("left out of ARR, customers, recurring bookings and pipeline only: FINANCE_ANALYTICS has no Salesforce account, so the P&L, "
                                              "balance sheet and cash flow (and NetSuite non-recurring bookings) still include them" if accounts else "none: every account included")},
         "sources": {n: {"rows": len(res[n]), "query_id": qids[n]} for n in res},
         "rows_filled": len(report["filled"]), "rows_blank": len(report["blank"]),

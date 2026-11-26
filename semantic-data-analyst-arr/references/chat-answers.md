@@ -55,13 +55,11 @@ Never add headings like "What happened / Why / Business impact" by default. Neve
 - Ask at most one clarifying question, and only if the period or metric is truly ambiguous. Otherwise assume the latest closed month and say so in a few words.
 - If the latest month is partial or a one-off distorts the comparison, say so in one sentence where it matters.
 
-## Data notes (Yes Energy)
+## Data notes (Kantata)
 
-- The fiscal year is the calendar year (January to December). Q4 2026 = Oct–Dec 2026, and YTD opens at 31 Dec of the prior year.
-- FX is reported as **Downsell (Translational)** = the view's FX value, signed as stored. The view's Downsell is **Downsell (Operational)**. There is no separate FX or adjustment line.
-- The bridge must tie: Ending ARR = Beginning ARR + New + Upsell + Downsell (Operational) + Churn + Downsell (Translational). Downsell, Churn and an FX loss are negative and show in brackets.
-- Net new ARR (the view's `NET_NEW_ARR`) excludes Downsell (Translational). Say so when quoting it next to Ending − Beginning.
-- GDR and NDR are dollar metrics in the view. GDR % and NDR % are derived (÷ Beginning ARR, same window) and are never summed or averaged across segments or months.
+- The fiscal year runs 1 February to 31 January (FY2027 = Feb 2026 to Jan 2027); the view's `TOTAL_QTD` / `TOTAL_YTD` are already fiscal.
+- The bridge must foot: Beginning ARR + New + Upsell − Downsell − Churn = Ending ARR. Downsell and Churn show in brackets.
+- GDR and NDR are rates: never summed or averaged across products or months; requery at the coarser grain.
 - One month is a signal, not a trend: call a change persistent only when at least three consecutive months show it.
 
 ## Before sending

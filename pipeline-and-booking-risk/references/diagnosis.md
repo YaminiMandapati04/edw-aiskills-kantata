@@ -41,7 +41,7 @@ Perform the roles yourself, one after the other, for one view.
   "lens": {"window": "QTD", "basis": "pq"},
   "written_by": "driver review + readout (Claude)",
   "findings": [{
-    "id": "f1", "title": "New ARR carry the quarter's decline",
+    "id": "f1", "title": "New sales carry the quarter's decline",
     "scope": {"drivers": ["m:arr_new"], "risks": ["not_closing"]},
     "decision_relevance": "high", "confidence": "medium", "persistence": "undetermined",
     "statements": [
@@ -83,7 +83,7 @@ Counts: findings ≥ 1. Each tab's summary: 3 to 5 bullets (head ≤ 10 words, n
 
 Persistence: `one_off`, `recurring`, `seasonal`, `timing`, `persistent`, `undetermined`; `recurring`, `persistent` and `timing` need an inference or hypothesis statement.
 
-In the summary bullets, attribution down the bookings hierarchy ("led by new ARR", "driven by PowerSignals") is arithmetic the bridge proves and is allowed; any other causal phrase only hedged in the same sentence ("may", "to be confirmed"). A cause the view does not carry (pricing, discounts, competition, quota, territories, campaigns, churn, renewals, procurement...) is written only as a possibility and named in the bullet's `unverified[]`.
+In the summary bullets, attribution down the bookings hierarchy ("led by new sales", "driven by SX") is arithmetic the bridge proves and is allowed; any other causal phrase only hedged in the same sentence ("may", "to be confirmed"). A cause the view does not carry (pricing, discounts, competition, quota, territories, campaigns, churn, renewals, procurement...) is written only as a possibility and named in the bullet's `unverified[]`.
 
 Forbidden anywhere: "higher than expected", "lower than expected", "root cause" as a claim, "confirmed cause", "verified cause", "will close / convert / recover / reverse / persist", "assigned to", "owned by", "stalled" without "proxy". Owners are suggested functions; dates are rule-generated targets; scenario credit is 0; nothing is approved.
 
@@ -93,8 +93,8 @@ Every `$` and `%` token in any text is registered in that item's `numbers[]` as 
 
 - `display` is the exact string in the text, as the page prints it: `$38k`, `$1.26mn`, `($378k)`, `+$159k`, `(30.1%)`, `+36.1%`. `gtm_brief.py brief` gives every figure the review may use with its display and source.
 - `value` is the payload value; the gate resolves `source` and compares (±0.5 for money, ±0.0006 for a fraction).
-- `source` is a payload path: `lenses[QTD_pq].kpis[total].variance`, `lenses[QTD_pq].drivers.product[p:powersignals-user-license].variance`, `risk.not_closing.acv`, `outlook.scenario[0].low`, `rest_of_year.still_to_match`. Read an exact value with `gtm_brief.py PAYLOAD resolve --path ...`.
-- Period labels (`2026-09`, `FY2026-Q3`), years, small counts and product names are exempt. Deal counts and points are not gated: copy them from the brief exactly.
+- `source` is a payload path: `lenses[QTD_pq].kpis[total].variance`, `lenses[QTD_pq].drivers.product[p:sx].variance`, `risk.not_closing.acv`, `outlook.scenario[0].low`, `rest_of_year.still_to_match`. Read an exact value with `gtm_brief.py PAYLOAD resolve --path ...`.
+- Period labels (`2026-09`, `FY2027-Q3`), years, small counts and product names are exempt. Deal counts and points are not gated: copy them from the brief exactly.
 
 ## 6. What the gate refuses
 

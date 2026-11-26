@@ -74,9 +74,10 @@ def month_end(d):
 
 
 # ----------------------------------------------------------------- fiscal calendar
-# Yes Energy's fiscal year is the calendar year, 1 January to 31 December, named by that year:
-# January to December 2026 is FY2026. Fiscal Q1 = Jan-Mar, Q2 = Apr-Jun, Q3 = Jul-Sep, Q4 = Oct-Dec.
-FY_START_MONTH = 1
+# Kantata's fiscal year runs 1 February to 31 January and is named by the year it ends:
+# February 2026 to January 2027 is FY2027. Fiscal Q1 = Feb-Apr, Q2 = May-Jul, Q3 = Aug-Oct, Q4 = Nov-Jan.
+# The Finance and ARR views carry the same calendar (PERIOD.YEAR / FY_YEAR = 2027 for February 2026).
+FY_START_MONTH = 2
 
 
 def fy_of(d):
@@ -99,7 +100,7 @@ def qstart(d):
 
 
 def qlabel(d):
-    """Fiscal quarter label, sortable as text: FY2026-Q3 (July to September 2026)."""
+    """Fiscal quarter label, sortable as text: FY2027-Q3 (August to October 2026)."""
     return f"FY{fy_of(d)}-Q{fiscal_quarter(d)}"
 
 

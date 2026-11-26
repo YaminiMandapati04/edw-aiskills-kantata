@@ -22,7 +22,7 @@ Suggested order: `brief` (`must_cover`: the executive-tier drivers and the flagg
 Write each finding so a reader can tell evidence from interpretation, in this order, using only the four statement states:
 
 1. **What happened** (`observed_fact`): the driver's actual, prior quarter and variance, and its share of the movement, every figure registered with its source path.
-2. **What the evidence shows** (`observed_fact` or `analytical_inference`): the signals that fired (step, outlier month, seasonal echo), the run-rate position, how concentrated the movement is in customers or deals, and for pipeline items the close-quarter mix, stage mix and risk tiers (weighted pipeline; the view has no target). Cite the evidence path. An inference rests on at least two references.
+2. **What the evidence shows** (`observed_fact` or `analytical_inference`): the signals that fired (step, outlier month, seasonal echo), the run-rate position, how concentrated the movement is in customers or deals, and for pipeline items the close-quarter mix, stage mix and risk tiers (unweighted; the view has no target). Cite the evidence path. An inference rests on at least two references.
 3. **What it may mean** (`hypothesis`): the commercial reading (large deals, a product launch, a pricing change, a seasonal close pattern), with `evidence_for`, `missing_evidence` and `closes_with`. Two readings that fit the same evidence are two hypotheses, side by side.
 4. **What remains unverified**: `missing_evidence` names what the view does not carry (deal terms, activity, contracts, invoices, renewals).
 5. **What management must answer** (`management_questions`): the specific question for the suggested owner function (Sales leadership, CRO, RevOps, FP&A). Never answer it yourself.

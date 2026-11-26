@@ -2,4 +2,3 @@
 # Everything else is standard library.
 openpyxl>=3.1      # all skills: Excel read/write, chronograph template
 matplotlib>=3.8    # semantic-data-analyst-arr, financial-variance-analysis, pipeline-and-booking-risk: charts
-snowflake-connector-python>=3.0  # chronograph queries, upload_to_stage.py in every skill

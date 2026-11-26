@@ -13,7 +13,7 @@ const DRV_BY = Object.fromEntries(P.drivers.map(d => [d.id, d]));
 const KPI_SERIES = { total: ['total'], arr_new: ['m:arr_new'], arr_upsell: ['m:arr_upsell'], non_recurring: ['m:non_recurring'], recurring: ['m:arr_new', 'm:arr_upsell'] };
 const PERSIST = { one_off_candidate: ['One-off', 'amb'], recurring_level_change: ['New level', 'sky'], seasonal: ['Seasonal', 'sky'], undetermined: null };
 const DIM_LABEL = { measure: 'Measure', product: 'Product', subsidiary: 'Subsidiary' };
-const VERSION = '2.0.0';
+const VERSION = '1.11.0';
 
 /* ---------- formatting ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -74,7 +74,7 @@ const ldrv = id => { for (const k of ['measure', 'product', 'subsidiary']) { con
 const rangeLabel = () => L().range.label;
 /* Compare basis: the same months one quarter earlier (lenses <WINDOW>_pq; year to date has none) */
 const CMP = () => L().cmp_short || 'last quarter', CMPN = (META.basis_labels && META.basis_labels.pq) || 'Prior quarter';
-/* weighted pipeline dated to close in the quarter, and by fiscal close quarter. The view holds no pipeline
+/* open pipeline (unweighted) dated to close in the quarter, and by fiscal close quarter. The view holds no pipeline
    target, so there is no coverage ratio, floor or target anywhere on the page */
 const IQ = PIPE.in_quarter || {}, BCQ = PIPE.by_close_quarter || [], LATE = PIPE.late_stage_label || 'late stage';
 const CAN_LOSS = !(P.capabilities && P.capabilities.loss_reasons) || P.capabilities.loss_reasons.state === 'available';
@@ -100,7 +100,7 @@ const aiReview = (id, title, items, tagHtml = '') => (items || []).length ? `<di
 /* ---------- header, tabs, footer, glossary ---------- */
 function renderHeader() {
   $('#pageTitle').textContent = `GTM review · ${META.as_of.name}`;
-  $('#scope').innerHTML = `<span class="chip">Scope <b>${esc(META.scope.filtered_to || 'All products')} · ${META.scope.subsidiaries.length} subsidiaries</b></span><span class="chip">USD</span>${FY ? `<span class="chip">Fiscal year Jan–Dec · <b>${esc(FY.year)} Q${esc(String(FY.quarter).slice(-1))}</b></span>` : ''}<span class="chip">${META.months_of_history} months of history</span>`;
+  $('#scope').innerHTML = `<span class="chip">Scope <b>${esc(META.scope.filtered_to || 'All products')} · ${META.scope.subsidiaries.length} subsidiaries</b></span><span class="chip">USD</span>${FY ? `<span class="chip">Fiscal year Feb–Jan · <b>${esc(FY.year)} Q${esc(String(FY.quarter).slice(-1))}</b></span>` : ''}<span class="chip">${META.months_of_history} months of history</span>`;
   const curW = L().window;
   $('#lens').innerHTML = `<div class="lrow"><span class="lab">Window</span><span class="seg" id="segWin">${['MTD', 'QTD'].map(w => `<button data-w="${w}" class="${w === curW ? 'on' : ''}" ${P.lenses[`${w}_pq`] && P.lenses[`${w}_pq`].available ? '' : `disabled title="${esc((P.lenses[`${w}_pq`] || {}).reason || 'not available')}"`}>${esc(META.window_labels[w])}</button>`).join('')}</span></div>
     <div class="lrow"><span class="lab">Compare</span><span class="seg"><button class="on">vs ${esc(CMPN)}</button></span></div>`;
@@ -129,11 +129,11 @@ function glossaryRows() {
     ['all', 'Figures', [
       ['($76k) · (420) bps', 'Brackets mark a negative figure. bps is a change in a rate or share in basis points (100 bps = 1 percentage point).'],
       ['+$510 · $143k · $1.92mn', 'A plus sign marks an increase; k and mn are thousands and millions of US dollars (ACV).'],
-      ['FY2026-Q3', 'A fiscal quarter. The fiscal year is the calendar year, 1 January to 31 December, named by that year: Q1 Jan–Mar, Q2 Apr–Jun, Q3 Jul–Sep, Q4 Oct–Dec. Quarter and year to date are fiscal.'],
+      ['FY2027-Q3', 'A fiscal quarter. The fiscal year runs 1 February to 31 January and is named by the year it ends: Q1 Feb–Apr, Q2 May–Jul, Q3 Aug–Oct, Q4 Nov–Jan. Quarter and year to date are fiscal.'],
       ['n.m. · —', 'n.m.: not meaningful (a percentage of 1,000% or more). —: not available, never zero.']]],
     ['all', 'Where the numbers come from', [
-      ['Bookings', 'Recurring: Salesforce closed-won opportunity lines on the close date, ARR (New) for New Customer and ARR (Upsell) for Upgrade, Renewal and Downgrade. Non-recurring: NetSuite one-time services revenue from the GL, on the period end date. Credits net off.'],
-      ['Pipeline, win rate, days to win', 'Salesforce opportunity line ACV. Pipeline is weighted (ACV × probability ÷ 100); pipeline created, won and lost ACV and win rate are unweighted. Never added to bookings.'],
+      ['Bookings', 'Recurring: Salesforce won New Sales and Seat Expansion opportunities (blended ARR) on the close date. Non-recurring: NetSuite non-recurring revenue from the income statement, on the period end date. Credits net off.'],
+      ['Pipeline, win rate, days to win', 'Salesforce opportunity ACV (blended ARR), unweighted: New Sales and Seat Expansion deals. Never added to bookings.'],
       ['Recurring ACV', RK ? `${esc(cap(RK.recurring_rule))}.` : 'Opportunity ACV.'],
       ['<span class="tag sky">proxy</span>', 'Stage age and close-date moves stand in for "stalled": the view has no activity or next-step data.'],
       ['<span class="tag sky">scenario</span>', 'A straight-line range from pipeline and win rate. Not a forecast; nothing is credited to it.']]],
@@ -143,18 +143,18 @@ function glossaryRows() {
       ['Not closing · high value', 'A high-value open deal whose expected close date has passed, or whose close date was pushed out at least once.'],
       ['Stuck in stage · high value', RK ? 'A high-value deal: ' + esc(RK.stuck.rule) + '.' : 'Longer in its stage than usual.'],
       ['High-value deals at risk', RK ? `${esc(cap(RK.high_value.rule))} that are not closing or stuck, as a share of high-value pipeline.` : 'The largest open deals that are not closing or stuck.'],
-      ['Pipeline at a glance', `Open pipeline as of ${esc(PIPE.as_of)}, what is dated to close in ${esc(IQ.quarter || 'the quarter')}, and pipeline created, win rate and lost ACV for the window. Pipeline is weighted (ACV × probability); there is no pipeline target in the view.`],
+      ['Pipeline at a glance', `Open pipeline as of ${esc(PIPE.as_of)}, what is dated to close in ${esc(IQ.quarter || 'the quarter')}, and pipeline created, win rate and lost ACV for the window. Unweighted; there is no pipeline target in the view.`],
       ['Where the pipeline is at risk', 'Open ACV that is not closing or stuck, by the stage each deal sits in.']]],
     ['bookings', 'Bookings tab', [
-      ['<span class="opx">+  =</span>', 'Bookings at a glance, in order of build-up: new ARR plus upsell ARR gives recurring bookings, plus non-recurring gives total bookings; recurring share and average deal value follow.'],
+      ['<span class="opx">+  =</span>', 'Bookings at a glance, in order of build-up: new sales plus seat expansion gives recurring bookings, plus non-recurring gives total bookings; recurring share and average deal value follow.'],
       ['Top two · top five customers', 'The share of recurring bookings in the window from the two and the five largest customers (non-recurring revenue has no account): how much one delayed deal would move the result.'],
       ['Largest deal', 'The largest single booked opportunity in the window (re-papered pairs left out) as a share of recurring bookings; click for the deal list.'],
       ['What moved bookings', 'Each measure, product or subsidiary against the same months last quarter; click a bar for its monthly trend and usual range.']]],
     ['outlook', 'Outlook tab', [
       ['Closing this quarter', `The open pipeline dated to close in ${esc(IQ.quarter || 'the quarter')}; past-due deals excluded.`],
-      [`${sw('background:var(--dark);width:10px;height:10px')} Weighted pipeline by close quarter`, 'Weighted pipeline (ACV × probability) by the fiscal quarter of its close date. No target or coverage: the view holds no pipeline target.'],
+      [`${sw('background:var(--dark);width:10px;height:10px')} Open pipeline by close quarter`, 'Open pipeline (unweighted) by the fiscal quarter of its close date. No target or coverage: the view holds no pipeline target.'],
       ['What the pipeline could deliver', 'A range per quarter from open pipeline and win rate. Not a forecast; nothing is credited to it.'],
-      ['What the remaining months must deliver', 'Bookings the rest of the fiscal year (to 31 December) needs to match last fiscal year, or to hold the fiscal-year-to-date growth rate. A scenario with credit 0, not a forecast.']]],
+      ['What the remaining months must deliver', 'Bookings the rest of the fiscal year (to 31 January) needs to match last fiscal year, or to hold the fiscal-year-to-date growth rate. A scenario with credit 0, not a forecast.']]],
     ['all', 'Thresholds', (META.thresholds || []).map(t => [esc(t.id.replace(/_/g, ' ')), `${esc(String(t.value))}: ${esc(t.basis)}${t.sensitivity && Object.keys(t.sensitivity).length ? ` · sensitivity (days, P90 / P75 / mean): ${esc(Object.entries(t.sensitivity).map(([k, v]) => `${k} ${Math.round(v.p90)}/${Math.round(v.p75)}/${Math.round(v.mean)}`).join(', '))}` : ''}`])
     ],
     ['panel', 'Detail panels (open from any tab)', [
@@ -265,7 +265,7 @@ function gauge(actual, comp, compName, fmt = v => pct(v), scaleMax = null) {
   const mx = scaleMax || Math.max(actual || 0, comp || 0) * 1.25 || 1;
   return `<div class="gauge"><i style="width:${Math.min(100, Math.max(0, (actual || 0) / mx * 100)).toFixed(1)}%"></i>${isNum(comp) ? `<b style="left:${Math.min(100, (comp || 0) / mx * 100).toFixed(1)}%" data-tip="${esc(compName)}|${esc(fmt(comp))}"></b>` : ''}</div><div class="gl"><span>${esc(fmt(0))}</span><span>${isNum(comp) ? `▮ ${esc(compName)} ${esc(fmt(comp))}` : esc(compName)}</span></div>`;
 }
-/* weighted pipeline by fiscal close quarter */
+/* open pipeline (unweighted) by fiscal close quarter */
 function closeQuarterChart(rows, { W = 760, H = 260 } = {}) {
   const padL = 58, padR = 12, padT = 18, padB = 44, vals = rows.map(r => r.open).filter(isNum), hi = Math.max(...vals, 1) * 1.12;
   const slot = (W - padL - padR) / rows.length, bw = Math.min(slot * 0.26, 46), sy = v => padT + (hi - v) / hi * (H - padT - padB);
@@ -411,7 +411,7 @@ function outlookCommentary() {
     const rest = isNum(ROY.still_to_match) ? ROY.still_to_match : ROY.to_match_py, t = isNum(ROY.py_rest) ? (rest <= ROY.py_rest ? 'fav' : 'unf') : 'neu';
     out.push({ t, ref: 'pipe:open', html: `<b>Rest of the year:</b> ${esc(ROY.months)} must deliver ${esc(money(ROY.to_match_py))} to match last fiscal year${isNum(ROY.to_hold_growth) ? ` (${esc(money(ROY.to_hold_growth))} to hold ${esc(pct(ROY.growth, { sign: true, dec: 0 }))} growth)` : ''}${isNum(ROY.won_since) ? `; ${esc(money(ROY.won_since))} of recurring deals already won leaves ${esc(money(ROY.still_to_match))}` : ''}${isNum(ROY.py_rest) ? `, against ${esc(money(ROY.py_rest))} delivered in the same months last year` : ''}.` });
   }
-  if (cr && isNum(cr.actual)) out.push({ t: cr.status === 'in_line' ? 'neu' : cr.status === 'ahead' ? 'fav' : 'unf', ref: 'kpi:pipeline_created', html: `<b>Pipeline created:</b> ${esc(money(cr.actual))} ${esc(L().window_label)}, ${esc(pct(cr.variance_pct, { sign: true }))} vs ${esc(CMP())}${isNum(cr.count) ? ` (${esc(pl(cr.count, 'deal'))}${isNum(cr.count_cmp) ? ` against ${cr.count_cmp}` : ''})` : ''}${ny && isNum(ny.acv) ? `; ${lnk('pipe:open', money(ny.acv))} more is open with no pipeline creation date yet` : ''}.` });
+  if (cr && isNum(cr.actual)) out.push({ t: cr.status === 'in_line' ? 'neu' : cr.status === 'ahead' ? 'fav' : 'unf', ref: 'kpi:pipeline_created', html: `<b>Pipeline created:</b> ${esc(money(cr.actual))} ${esc(L().window_label)}, ${esc(pct(cr.variance_pct, { sign: true }))} vs ${esc(CMP())}${isNum(cr.count) ? ` (${esc(pl(cr.count, 'deal'))}${isNum(cr.count_cmp) ? ` against ${cr.count_cmp}` : ''})` : ''}${ny && isNum(ny.acv) ? `; ${lnk('pipe:open', money(ny.acv))} more is open but not yet at 03 - EVALUATE` : ''}.` });
   const risks = [ar && isNum(ar.acv) ? `${lnk('rk:at_risk', money(ar.acv))} (${esc(pct(ar.share, { dec: 0 }))}) of open pipeline is not closing or stuck` : null,
     ag && ag.buckets ? (b => b ? `${lnk('pipe:open', money(b.acv))} is over a year old` : null)(ag.buckets.find(b => /^over/.test(b.label))) : null,
     (q => q && isNum(q.open) && q.open >= 0.5 ? `${lnk('quarter:' + q.quarter, money(q.open))} is past due` : null)(BCQ.find(r => r.id === 'past-due'))].filter(Boolean);
@@ -428,12 +428,12 @@ function renderOutlook() {
   const wvb = PIPE.won_vs_booked && PIPE.won_vs_booked.length ? `<div class="panel" id="out-wvb"><h3>Won opportunities vs recurring bookings <small>two Salesforce scopes · reconciliation</small></h3>${lineChart({ labels: PIPE.won_vs_booked.map(r => String(r.quarter).replace(/^FY20(\d\d)-(Q\d)$/, 'FY$1 $2')), series: [{ name: 'Won ACV', vals: PIPE.won_vs_booked.map(r => r.won), cls: 'l-act' }, { name: 'Recurring bookings', vals: PIPE.won_vs_booked.map(r => r.booked), cls: 'l-cmp' }], height: 190, W: 560 })}
         ${legend([['background:var(--ink)', 'Won opportunity ACV (pipeline segments)'], ['background:var(--budget)', 'Recurring bookings (bookings teams)']])}<p class="xs mut" style="margin-top:6px">Booked ÷ won has run ${esc(Math.min(...PIPE.won_vs_booked.map(r => r.ratio)).toFixed(2))}×–${esc(Math.max(...PIPE.won_vs_booked.map(r => r.ratio)).toFixed(2))}× over ${PIPE.won_vs_booked.length} quarters: won pipeline is a usable lead for bookings.</p></div>` : '';
   $('#view-outlook').innerHTML = `
-    <section class="sec">${secHead('What is in the pipeline?', `pipeline as at ${esc(PIPE.as_of)} · weighted ACV (× probability) · no pipeline target in the view`)}
+    <section class="sec">${secHead('What is in the pipeline?', `pipeline as at ${esc(PIPE.as_of)} · unweighted ACV · no pipeline target in the view`)}
       <div class="out-top"><div class="panel out-cmt" id="out-commentary">${outlookCommentary()}${aiReview('out-reading', 'What this means', meaningOutlook(), '<span class="tag amb">for discussion</span>')}</div>
       <div class="kpi-col" id="out-tiles">
         ${tile('quarter:' + (IQ.quarter || ''), `Closing in ${IQ.quarter || 'quarter'}`, money(IQ.open), `open pipeline dated to close in ${esc(IQ.quarter || 'the quarter')}, as at ${esc(IQ.as_of || PIPE.as_of)}; past-due deals excluded`, true)}
         ${s0 ? tile('scenario:' + s0.quarter, `What ${s0.quarter} could deliver`, `${money(s0.low)} – ${money(s0.high)}`, `of ${esc(money(s0.open))} open closing in the quarter · not a forecast${isNum(s0.won_since) ? ` · <b>${esc(money(s0.won_since))} won</b> after ${esc(PIPE.as_of)}${s0.quarter_ended ? `; the quarter ended ${esc(s0.quarter_end)}` : ` (to ${esc(s0.won_since_to)})`}` : ''}`).replace('class="kv"', 'class="kv rng"') : ''}
-        ${tile('pipe:open', 'Weighted pipeline', money(PIPE.open), `${esc(pl(PIPE.open_count, 'deal'))}, as at ${esc(PIPE.as_of)} · weighted`)}
+        ${tile('pipe:open', 'Open pipeline', money(PIPE.open), `${esc(pl(PIPE.open_count, 'deal'))}, as at ${esc(PIPE.as_of)} · unweighted`)}
         ${tile('kpi:pipeline_created', `Pipeline created · ${L().window_label}`, money(cr.actual), `<span class="${cr.status === 'in_line' ? 'neu' : cr.status === 'ahead' ? 'fav' : 'unf'}">${esc(pct(cr.variance_pct, { sign: true }))}</span> vs ${esc(CMP())}`)}
       </div></div></section>
     ${roySec}
@@ -448,11 +448,11 @@ function renderOutlook() {
         <p class="xs mut" style="margin-top:10px">${esc(clean(OUT.rule))}. Salesforce opportunity ACV (recurring), not non-recurring revenue.</p></div>
     </div></section>
     <section class="sec"><div class="grid g2 eqh">
-      <div class="panel" id="out-close"><h3>Weighted pipeline by close quarter <small>fiscal quarters · weighted · as at ${esc(PIPE.close_quarters_as_of || PIPE.as_of)}</small></h3>${closeQuarterChart(BCQ, { W: 560 })}
+      <div class="panel" id="out-close"><h3>Open pipeline by close quarter <small>fiscal quarters · unweighted · as at ${esc(PIPE.close_quarters_as_of || PIPE.as_of)}</small></h3>${closeQuarterChart(BCQ, { W: 560 })}
         ${legend([['background:var(--dark);width:10px;height:10px', 'Open pipeline']])}
-        <p class="xs mut" style="margin-top:8px">Fiscal quarters (calendar year: Q1 Jan–Mar, Q2 Apr–Jun, Q3 Jul–Sep, Q4 Oct–Dec); past due = close date before ${esc(PIPE.close_quarters_as_of || PIPE.as_of)}; later = beyond the quarters shown. The bars add up to the ${esc(money(PIPE.open))} headline. No ratio: the view holds no pipeline target.</p></div>
+        <p class="xs mut" style="margin-top:8px">Fiscal quarters (Q1 Feb–Apr, Q2 May–Jul, Q3 Aug–Oct, Q4 Nov–Jan); past due = close date before ${esc(PIPE.close_quarters_as_of || PIPE.as_of)}; later = beyond the quarters shown. The bars add up to the ${esc(money(PIPE.open))} headline. No ratio: the view holds no pipeline target.</p></div>
       ${PIPE.ageing ? `<div class="panel" id="out-ageing"><h3>How old the open pipeline is <small>by ${esc(PIPE.ageing.basis || 'creation date')} · as at ${esc(PIPE.ageing.as_of)}</small></h3>${hBars(PIPE.ageing.buckets.map(b => ({ name: b.label, value: b.acv, ref: 'pipe:open', cls: b.label.startsWith('over') ? 'unf' : '', label: `${money(b.acv)} · ${pct(b.share, { dec: 0 })}` })))}
-        <p class="xs mut" style="margin-top:8px">${esc(money(PIPE.ageing.far_out.acv))} (${esc(pct(PIPE.ageing.far_out.share, { dec: 0 }))}) is dated to close after ${esc(PIPE.ageing.far_out.beyond)}.${PIPE.not_yet_created ? ` ${esc(money(PIPE.not_yet_created.acv))} (${esc(pl(PIPE.not_yet_created.count, 'deal'))}) has no pipeline creation date yet, so pipeline created does not count it.` : ''}</p></div>` : '<div></div>'}
+        <p class="xs mut" style="margin-top:8px">${esc(money(PIPE.ageing.far_out.acv))} (${esc(pct(PIPE.ageing.far_out.share, { dec: 0 }))}) is dated to close after ${esc(PIPE.ageing.far_out.beyond)}.${PIPE.not_yet_created ? ` ${esc(money(PIPE.not_yet_created.acv))} (${esc(pl(PIPE.not_yet_created.count, 'deal'))}) has not reached 03 - EVALUATE, so pipeline created does not count it yet.` : ''}</p></div>` : '<div></div>'}
     </div></section>`;
   bindRefs($('#view-outlook'));
 }
@@ -568,10 +568,10 @@ function kpiDrawer(id) {
   const tabs = { Overview: () => `${facts([['This period', f(k.actual)], [CMPN, f(k.comparator)], ['Change', ratio ? pts(k.variance) : money(k.variance, { sign: true }), t]].concat(extra))}
       ${id === 'total' ? `<h4>Reading</h4>${say([esc(clean(L().headline.text))])}` : ''}
       ${KPI_SERIES[id] ? `<h4>Last 13 months</h4>${trendBlock(KPI_SERIES[id])}` : ''}
-      ${id === 'pipeline_created' && PIPE.created_trend ? `<h4>Pipeline created each month</h4>${lineChart({ labels: PIPE.created_trend.labels, series: [{ name: 'Created', vals: PIPE.created_trend.actual, cls: 'l-act' }, { name: 'Last year', vals: PIPE.created_trend.py, cls: 'l-py' }], height: 200, W: 440, cur: PIPE.created_trend.labels.length - 1 })}${legend([['background:var(--ink)', 'Created'], ['background:var(--ly)', 'Same month last year']])}<p class="xs mut" style="margin-top:6px">The leading indicator of future bookings. A deal counts as created on its pipeline creation date (the opportunity created date).${PIPE.not_yet_created ? ` ${esc(money(PIPE.not_yet_created.acv))} of open pipeline at ${esc(PIPE.not_yet_created.as_of)} (${esc(pl(PIPE.not_yet_created.count, 'deal'))}) has not reached it yet.` : ''}</p>` : ''}
+      ${id === 'pipeline_created' && PIPE.created_trend ? `<h4>Pipeline created each month</h4>${lineChart({ labels: PIPE.created_trend.labels, series: [{ name: 'Created', vals: PIPE.created_trend.actual, cls: 'l-act' }, { name: 'Last year', vals: PIPE.created_trend.py, cls: 'l-py' }], height: 200, W: 440, cur: PIPE.created_trend.labels.length - 1 })}${legend([['background:var(--ink)', 'Created'], ['background:var(--ly)', 'Same month last year']])}<p class="xs mut" style="margin-top:6px">The leading indicator of future bookings. A deal counts as created when it reaches 03 - EVALUATE.${PIPE.not_yet_created ? ` ${esc(money(PIPE.not_yet_created.acv))} of open pipeline at ${esc(PIPE.not_yet_created.as_of)} (${esc(pl(PIPE.not_yet_created.count, 'deal'))}) has not reached it yet.` : ''}</p>` : ''}
       ${comps ? `<h4>Largest drivers</h4>${divBars(comps.map(d => ({ name: d.label, value: d.variance, ref: 'driver:' + d.id })))}` : ''}
       ${id === 'win_rate' ? `<button class="btnl" data-ref="conv:win">Win rate by source and product ›</button>` : ''}
-      ${id === 'pipeline_created' || id === 'win_rate' ? `<p class="xs mut" style="margin-top:12px">Salesforce opportunity data (all opportunity types, unweighted). Not comparable with booking ACV.</p>` : ''}
+      ${id === 'pipeline_created' || id === 'win_rate' ? `<p class="xs mut" style="margin-top:12px">Salesforce opportunity data (New Sales and Seat Expansion). Not comparable with booking ACV.</p>` : ''}
       ${k.small_sample ? `<div class="nx" style="margin-top:12px">Fewer than eight closed deals in this window: read the rate with care.</div>` : ''}` };
   if (id === 'total') { tabs['By measure'] = () => bridgeWf('by_measure'); tabs['By product'] = () => bridgeWf('by_product'); tabs['By subsidiary'] = () => bridgeWf('by_subsidiary'); }
   return { title: k.label, sub: `${rangeLabel()} vs ${L().range.cmp_label}`, tags: [tag(t, k.status === 'ahead' ? 'Ahead' : k.status === 'behind' ? 'Behind' : 'In line'), baseMark()], tabs };
@@ -608,11 +608,11 @@ function quarterDrawer(q) {
   const r = BCQ.find(x => x.quarter === q); if (!r) return null;
   return { title: `Pipeline closing in ${q}`, sub: `open pipeline expected to close in ${q} (fiscal quarter) · as of ${PIPE.as_of}`, tags: [baseMark()],
     tabs: { Overview: () => `${facts([['Open pipeline', money(r.open)], ['Deals', String(r.count)], [`Late stage`, money(r.late_stage)]])}
-      <h4>What it means</h4>${say([isNum(r.late_stage) ? `${esc(money(r.late_stage))} sits in late stage (${esc(LATE)}).` : '', 'Weighted ACV (ACV × Salesforce probability ÷ 100); the view holds no pipeline target, so there is no coverage ratio.', 'Close quarters use the close date; deals already past due are counted as not closing, not here.'])}` } };
+      <h4>What it means</h4>${say([isNum(r.late_stage) ? `${esc(money(r.late_stage))} sits in late stage (${esc(LATE)}).` : '', 'Unweighted ACV; the view holds no pipeline target, so there is no coverage ratio.', 'Close quarters use the close date; deals already past due are counted as not closing, not here.'])}` } };
 }
 function pipeDrawer() {
   const grid = PIPE.by_stage_quarter, mx = Math.max(...grid.rows.flatMap(x => x.cells.map(c => c.acv)), 1);
-  return { title: 'Weighted pipeline', sub: `as of ${PIPE.as_of} · Salesforce ACV × probability`, tags: [baseMark()],
+  return { title: 'Open pipeline', sub: `as of ${PIPE.as_of} · Salesforce ACV, unweighted`, tags: [baseMark()],
     tabs: { Overview: () => `${facts([['Open', money(PIPE.open)], ['Deals', String(PIPE.open_count)], ['Average deal', money(PIPE.avg_value)], [`Late stage (${LATE})`, money(PIPE.late_stage)]])}
       ${PIPE.py ? `<h4>A year earlier</h4>${facts([['Open', money(PIPE.py.open)], ['Change', pct(PIPE.py.open_var_pct, { sign: true })], ['Deals', String(PIPE.py.open_count)], ['Average deal', money(PIPE.py.avg_value)]])}` : ''}
       <h4>By fiscal close quarter</h4>${hBars(BCQ.map(r => ({ name: r.quarter, value: r.open, ref: 'quarter:' + r.quarter, label: `${pl(r.count, 'deal')} · ${money(r.open)}` })))}

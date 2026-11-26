@@ -1,7 +1,7 @@
 """Since-last-run comparison for the recurring GTM dashboard.
 
 Each page embeds its whole payload, so the previous month's HTML is the record of the
-previous run: no separate state file. The page keeps one fixed name (yes_energy_pipeline_risk_readout.html)
+previous run: no separate state file. The page keeps one fixed name (pipeline_risk_readout.html)
 and is rebuilt on every run; when a run is for a later month than the page already there, that
 page is first kept as previous/<name> beside it, so daily reruns within a month all compare with
 the last page of the month before. This module finds that page, reads its payload and lists
@@ -9,7 +9,7 @@ what changed, deterministically. The result goes into the build's JSON line for 
 hand-over message; the page itself is unchanged (contract sda.gtm-analysis/2.0.0).
 
 Compared on stable ground only: the last-twelve-month lens (it never resets at a year or
-quarter boundary), the pipeline snapshot (weighted; there is no coverage), the actions of the
+quarter boundary), the pipeline snapshot (unweighted; there is no coverage), the actions of the
 LTM lens and the QC checks. Two runs are compared only when both are on the same contract
 and data mode; otherwise the comparison says why it is unavailable.
 """

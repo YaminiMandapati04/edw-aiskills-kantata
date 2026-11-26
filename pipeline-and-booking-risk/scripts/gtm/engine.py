@@ -18,7 +18,7 @@ payload the renderer displays (contract sda.gtm-analysis/2.0.0):
 
 Every reportable figure is computed here. Prose is composed from these figures
 only, with negatives in brackets and mn / k scale. Quarters and years are fiscal:
-Yes Energy's fiscal year is the calendar year, 1 January to 31 December (common.FY_START_MONTH)."""
+Kantata's year runs 1 February to 31 January (common.FY_START_MONTH)."""
 import datetime as dt
 import re
 
@@ -29,23 +29,23 @@ from .common import BuildError, is_num, mean, median, month_add, month_end, safe
 from .common import FY_START_MONTH, fy_of, fy_start, is_quarter_end, qlabel, qstart
 from .common import money as _money, pct as _pct
 
-# Recurring bookings are Salesforce closed-won opportunity lines, split by BOOKING_METRIC: ARR (New) (New Customer
-# opportunities) -> arr_new, ARR (Upsell) (Upgrade, Renewal and Downgrade opportunities) -> arr_upsell. Non-recurring
-# bookings are NetSuite one-time services revenue from the GL (BOOKING_METRIC = Non-Recurring).
-MEASURES = [("arr_new", "New ARR", "ARR (New)"), ("arr_upsell", "Upsell ARR", "ARR (Upsell)"),
+# Recurring bookings are Salesforce won opportunities (BOOKING_METRIC = Recurring Services), split by OPPORTUNITY_TYPE:
+# New Sales -> arr_new, Seat Expansion -> arr_upsell. Non-recurring bookings are NetSuite non-recurring revenue from the
+# income statement (BOOKING_METRIC = Non-Recurring). The view's ARR (New) / ARR (Upsell) metrics are always 0.
+MEASURES = [("arr_new", "New sales", "New Sales"), ("arr_upsell", "Seat expansion", "Seat Expansion"),
             ("non_recurring", "Non-recurring", "Non-Recurring Bookings")]
 METRIC_TO_MEASURE = {m[2]: m[0] for m in MEASURES} | {"Non-Recurring": "non_recurring"}
-RECURRING_METRICS = ("Recurring Bookings",)   # a line-level recurring metric with no ARR split (legacy extracts only)
+RECURRING_METRICS = ("Recurring Services", "Recurring Bookings")
 NO_ACCOUNT, NO_SUBSIDIARY, NO_PRODUCT = "No account (non-recurring)", "No subsidiary (recurring)", "No product (non-recurring)"
 WINDOWS = ["MTD", "QTD", "YTD", "LTM"]
 WINDOW_LABELS = {"MTD": "Month", "QTD": "Quarter to date", "YTD": "Year to date", "LTM": "Last twelve months"}
 # Compare basis: each window against the same months one quarter earlier (Oct 2026 → Jul 2026); lenses are <WINDOW>_pq.
 # Fiscal quarters are three-month blocks, so a quarter to date shifted back three months is the prior fiscal quarter to date.
-# Year to date (from 1 January) has no prior-quarter equivalent, so it is not built as a lens.
+# Year to date (from 1 February) has no prior-quarter equivalent, so it is not built as a lens.
 BASIS = "pq"
 PQ_WINDOWS = ("MTD", "QTD", "LTM")
 CMP_SHORT = "last quarter"
-LATE_STAGE_ORDER = 5              # Align onwards (STAGE_ORDER 1 = Stage 0 ... 5 = Align, 6 = Validate, 7 = Invest)
+LATE_STAGE_ORDER = 5              # 04 - PROPOSE onwards (milestone 1; STAGE_ORDER 1 = 00 - PROSPECT)
 AGED_MULTIPLE = 2.0               # open deal older than 2x the typical days for its stage
 MIN_CLOSED_FOR_RATE = 8           # fewer closed deals than this: win rate shown, not read as a finding
 RR_MONTHS = 6
@@ -57,8 +57,8 @@ BREADTH_SHARE = 0.60              # "broad-based" only when at least 60% of subs
 MIN_P90_RUNS = 30                 # stage-age benchmark: fewer non-zero completed runs than this -> "not tested"
 HIGH_VALUE_ACV = 100000.0         # velocity split: won deals of $100k ACV or more (fixed, so the live extract can band in SQL)
 CLOSED_STAGES = {"07 - CLOSE (WON)", "07 - CLOSE (LOST)", "Closed Won", "Closed Lost", "Closed"}
-# one-off product families: their ACV is excluded from recurring ACV. Yes Energy opportunity ACV is the estimated
-# product ARR change of each line, so none is one-off.
+# one-off product families: their ACV is excluded from recurring ACV. Kantata opportunity ACV is blended ARR
+# (BLENDED_ARR_USD) on New Sales and Seat Expansion deals only, so none is one-off.
 ONE_OFF_FAMILIES = ()
 _ONE_OFF = {f.lower() for f in ONE_OFF_FAMILIES}
 
@@ -224,8 +224,7 @@ def range_label(a, b):
 
 
 def stage_order_of(name):
-    """STAGE_ORDER from a numbered stage name prefix (NN - NAME = NN + 1); 99 when there is no prefix. Yes Energy stages
-    (Stage 0, Proposed Renewal, Qualify ... Invest) carry no prefix: their order comes from DIM_STAGE_MAPPING.STAGE_ORDER."""
+    """STAGE_ORDER from the stage name prefix: 00 - PROSPECT = 1 ... 06 - NEGOTIATE = 7; 99 when there is no prefix."""
     m = re.match(r"^(\d{2})\s*-", str(name or ""))
     return int(m.group(1)) + 1 if m else 99
 
@@ -239,9 +238,7 @@ def measure_of(metric, otype):
             return "arr_new"
         if "expansion" in t or t.startswith("seat") or t.startswith("upsell"):
             return "arr_upsell"
-        if t in ("upgrade", "renewal", "downgrade"):
-            return "arr_upsell"
-        raise BuildError(f"recurring booking line with opportunity type {otype!r}: expected New Customer, Upgrade, Renewal or Downgrade")
+        raise BuildError(f"recurring booking line with opportunity type {otype!r}: expected New Sales or Seat Expansion")
     return METRIC_TO_MEASURE.get(m)
 
 
@@ -266,7 +263,7 @@ def _from_workbook(wb, product=None):
                      "ecq": qlabel(to_date(r["CLOSE_DATE"])) if r.get("CLOSE_DATE") else "",
                      "created": to_date(r["PIPELINE_CREATION_DATE"]) if r.get("PIPELINE_CREATION_DATE") else None,
                      "opened": to_date(r["CREATED_DATE"]) if r.get("CREATED_DATE") else None,
-                     "acv": to_num(r.get("ACV_USD")) or 0.0, "probability": to_num(r.get("PROBABILITY")),
+                     "acv": to_num(r.get("ACV_USD")) or 0.0,
                      "loss": str(r.get("LOSS_REASON") or "") or None,
                      "account": str(r.get("ACCOUNT_NAME") or "") or None, "family": r.get("PRODUCT_FAMILY"),
                      "stype": r.get("OPPORTUNITY_TYPE") or r.get("SUBSCRIPTION_TYPE"),
@@ -333,11 +330,7 @@ def _from_workbook(wb, product=None):
               "OPPORTUNITY_TYPE": r.get("OPPORTUNITY_TYPE"), "BOOKING_ACV_USD": r.get("BOOKING_ACV_USD"), "PRODUCT": r.get("PRODUCT"),
               "SUBSIDIARY_NAME": r.get("SUBSIDIARY_NAME"), "COMPANY_NAME": r.get("ACCOUNT_NAME") or r.get("COMPANY_NAME"),
               "SOURCE_ORDER": r.get("OPPORTUNITY_ID") or r.get("SOURCE_ORDER")} for r in wb["BOOKING_LINES"]]
-    # open pipeline is weighted, as live.load() hands it over: ACV x PROBABILITY / 100 (created, won and lost stay unweighted)
-    def weighted(o):
-        p = o.get("probability")
-        return dict(o, acv=o["acv"] * p / 100 if is_num(p) else o["acv"], acv_unweighted=o["acv"])
-    return {"lines": lines, "open_deals": [weighted(o) for o in opps if o["status"] == "Open"], "closed": closed, "created": created,
+    return {"lines": lines, "open_deals": [o for o in opps if o["status"] == "Open"], "closed": closed, "created": created,
             "velocity": velocity,
             "stage_days": {k: round(mean(v), 1) for k, v in typical.items()}, "cur_start": cur_start,
             "cards": None, "bookings_mart": None, "loss_reasons_available": any(o["loss"] for o in opps), "late_stage_order": LATE_STAGE_ORDER,
@@ -599,7 +592,7 @@ def _risk(inp, open_lines, data_asof, as_of, overall, loo):
                                                      "no_family_lines": len(no_family), "no_family_acv": round(sum(o.get("acv") or 0.0 for o in no_family), 2),
                                                      "split_available": any(str(o.get("stype") or "").strip() for o in open_lines)},
             "recurring_rule": ("line ACV excluding one-off product families: " + ", ".join(ONE_OFF_FAMILIES)) if ONE_OFF_FAMILIES else
-                              "the opportunity line ACV (estimated product ARR change): all of it is recurring",
+                              "the opportunity ACV (blended ARR on New Sales and Seat Expansion deals): all of it is recurring",
             "not_closing": not_closing, "stuck": stuck_v, "high_value": high_value, "at_risk": at_risk, "insights": _add_short(ins), "actions": _add_ask_short(acts),
             "method": "proxy: the view has no activity or next-step data"}
 
@@ -846,7 +839,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
         lid = f"{w}_{BASIS}"
         if w not in PQ_WINDOWS:
             lenses[lid] = {"id": lid, "window": w, "basis": BASIS, "available": False,
-                           "reason": "fiscal year to date (from 1 January) has no prior-quarter equivalent: shifted back a quarter it is not a fiscal period"}
+                           "reason": "fiscal year to date (from 1 February) has no prior-quarter equivalent: shifted back a quarter it is not a fiscal period"}
             continue
         if pa < first:
             lenses[lid] = {"id": lid, "window": w, "basis": BASIS, "available": False, "reason": "no prior-quarter months in the data"}
@@ -1004,7 +997,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
                        "breadth": breadth, "organic": organic, "gross_to_net": g2n, "sub_state": sst, "conv_size": conv_size(a, b), "conv_size_cmp": conv_size(pa, pb),
                        "lost": _lost(lost_deals, a, b, pa, pb, range_label(a, b), range_label(pa, pb)) if inp.get("lost_lines") is not None else None}
 
-    # -------- pipeline (point in time). Weighted values (the loader applies ACV x probability); the view holds no pipeline target, so there is no coverage.
+    # -------- pipeline (point in time). Unweighted values only; the view holds no pipeline target, so there is no coverage.
     open_ = inp["open_deals"]
     data_asof = max([o["refreshed"] for o in open_ if o.get("refreshed")] or [inp.get("refreshed") or month_end(as_of)])
     # close quarters are anchored on the date the deal values are from: the analysis month-end when the month-end snapshot by
@@ -1168,8 +1161,8 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
                 grid_s.append({"id": slug(sn), "stage": sn, "order": so, "cells": cells})
             upd.update(by_stage_quarter={"columns": cols, "rows": grid_s}, grid_as_of=analysis_date.isoformat())
         pipeline.update(**upd)
-    # ageing by the opportunity created date (CREATED_DATE, set on every opportunity; in the Yes Energy view PIPELINE_CREATION_DATE
-    # equals CREATED_DATE, so a deal missing one is rare) and pipeline dated more than two quarters out
+    # ageing by the opportunity created date (CREATED_DATE, set on every opportunity; PIPELINE_CREATION_DATE is set only when a
+    # deal reaches 03 - EVALUATE, so it would leave the early stages out) and pipeline dated more than two quarters out
     age_from = lambda o: o.get("opened") or o.get("pipe_created")
     pre = [o for o in open_ if not o.get("pipe_created")]
     if open_ and any("pipe_created" in o for o in open_):
@@ -1179,7 +1172,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
         pipeline["not_yet_created"] = {"acv": round(sum(o["acv"] for o in pre), 2), "count": nopps(pre), "as_of": data_asof.isoformat(),
                                        "share": round(sum(o["acv"] for o in pre) / open_acv, 4) if open_acv else None,
                                        "by_stage": [{"stage": k, "acv": round(v, 2)} for k, v in sorted(st_pre.items(), key=lambda kv: -kv[1])],
-                                       "rule": "open deals with no PIPELINE_CREATION_DATE (it equals the created date in the view), so pipeline created does not count them yet"}
+                                       "rule": "open deals with no PIPELINE_CREATION_DATE: it is set when a deal reaches 03 - EVALUATE, so pipeline created does not count them yet"}
     if any(age_from(o) for o in open_):
         buckets = {"under 90 days": 0.0, "90–365 days": 0.0, "over 365 days": 0.0, "no created date": 0.0}
         for o in open_:
@@ -1201,7 +1194,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
             bq[qlabel(x["m"])] = bq.get(qlabel(x["m"]), 0.0) + x["acv"]
     full_q = [q for q in sorted(set(wq) & set(bq)) if q < qlabel(as_of) or is_quarter_end(as_of)][-7:]
     pipeline["won_vs_booked"] = [{"quarter": q, "won": round(wq[q], 2), "booked": round(bq[q], 2), "ratio": round(bq[q] / wq[q], 2) if wq[q] else None} for q in full_q]
-    # rest of the fiscal year (scenario, credit 0): what the remaining months to 31 December must deliver
+    # rest of the fiscal year (scenario, credit 0): what the remaining months to 31 January must deliver
     fy0 = fy_start(as_of)
     fy_last = month_add(fy0, 11)
     if as_of < fy_last:
@@ -1219,7 +1212,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
                         "ytd": round(ytd_now, 2), "to_match_py": round(py_full - ytd_now, 2) if have_py else None,
                         "to_hold_growth": round(py_rest * (1 + g), 2) if g is not None else None,
                         "growth": round(g, 4) if g is not None else None, "credit": 0,
-                        "rule": f"fiscal year FY{fy_of(as_of)} (1 January to 31 December): to match last fiscal year: last fiscal year's total less this fiscal "
+                        "rule": f"fiscal year FY{fy_of(as_of)} (1 February to 31 January): to match last fiscal year: last fiscal year's total less this fiscal "
                                 f"year to date; to hold the growth rate: last year's {rest} × (1 + fiscal-year-to-date growth)",
                         "complete": have_py}
         # recurring won since the analysis month (Salesforce won ACV after the last closed month, up to the deal refresh date):
@@ -1278,14 +1271,14 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
         L["headline"] = {"text": L["insights"][0]["text"]}
 
     # -------- QC
-    checks = [{"id": "hierarchy", "result": "PASS", "detail": "Total = Recurring + Non-recurring and Recurring = New ARR + Upsell ARR in every lens."},
+    checks = [{"id": "hierarchy", "result": "PASS", "detail": "Total = Recurring + Non-recurring and Recurring = New sales + Seat expansion in every lens."},
               {"id": "bridges_reconcile", "result": "PASS", "detail": "Prior quarter + every step = this period, to the cent, for the measure, product and subsidiary bridges."},
               {"id": "blank_metric_lines", "result": "INFO" if blank_metric else "PASS", "detail": f"{plural(blank_metric, 'line')} with no booking metric left out (they count in no metric)."},
               {"id": "cancellations", "result": "INFO", "detail": f"{plural(cancels, 'negative booking line')} (credits on won opportunities or non-recurring revenue) net off inside their month."}]
     if as_of_note:
         checks.append({"id": "as_of_complete", "result": "INFO", "detail": as_of_note + "."})
     if bmart:
-        # every month of the page against the mart's MTD at that month-end; the page's fiscal windows (from 1 January) and
+        # every month of the page against the mart's MTD at that month-end; the page's fiscal windows (from 1 February) and
         # LTM are sums of these same months. The mart's own QTD / YTD / LTM columns are not used: they are tagged to the keys
         # present at one month, so keys missing from the as-of month drop out and the window is incomplete.
         diffs, n_cmp = [], 0
@@ -1345,42 +1338,41 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
     caveats = ["Local test data: a synthetic workbook, not governed view output." if data_mode == "local" else None,
                "Windows are computed from booking and opportunity lines (the workbook has no KPI marts)." if data_mode == "local" else None,
                "Open pipeline a year ago is not in the workbook, so open pipeline shows no prior year." if not py else None,
-               f"Fiscal year is the calendar year, 1 January to 31 December (FY{fy_of(as_of)} runs {fy_start(as_of):%b %Y} to {month_add(fy_start(as_of), 11):%b %Y}); "
-               "quarters are Jan–Mar, Apr–Jun, Jul–Sep and Oct–Dec.",
-               "Recurring bookings are Salesforce closed-won opportunity lines (ARR (New) for New Customer, ARR (Upsell) for Upgrade, Renewal and Downgrade), "
-               "on the close date; non-recurring bookings are NetSuite one-time services revenue from the GL, on the period end date.",
-               "Pipeline values are weighted ACV (line ACV × Salesforce probability ÷ 100). Pipeline created, won and lost ACV are unweighted. "
-               "The view holds no pipeline or bookings target, so there is no coverage ratio and nothing is read against a target.",
+               f"Fiscal year 1 February to 31 January, named by the year it ends (FY{fy_of(as_of)} runs {fy_start(as_of):%b %Y} to {month_add(fy_start(as_of), 11):%b %Y}); "
+               "quarters are Feb–Apr, May–Jul, Aug–Oct and Nov–Jan.",
+               "Recurring bookings are Salesforce won New Sales and Seat Expansion opportunities at blended ARR, on the close date; non-recurring bookings are "
+               "NetSuite non-recurring revenue from the income statement, on the period end date.",
+               "Pipeline values are unweighted ACV. The view holds no pipeline or bookings target, so there is no coverage ratio and nothing is read against a target.",
                "Win rate counts distinct opportunities closed in the window (governed WON_ and LOST_ metrics by close month)." if governed else None,
                "The view has no loss reason, so lost ACV is not split by reason." if not loss_ok else None,
                "Recurring bookings and pipeline (Salesforce) are never added to non-recurring revenue (NetSuite) beyond the governed Total Bookings." if governed else None,
                "Stage age is a proxy for stalled deals: the view has no activity data.",
-               f"Recurring ACV: {risk['recurring_rule']}" + ("; new ARR (New Customer) vs upsell ARR (Upgrade, Renewal, Downgrade) by opportunity type." if risk["open"]["split_available"] else "."),
+               f"Recurring ACV: {risk['recurring_rule']}" + ("; new sales vs seat expansion by opportunity type." if risk["open"]["split_available"] else "."),
                "Close-date pushes are seen only at stage changes (the close date recorded at each change, then today's)." if risk["not_closing"]["pushes_available"]
                else "No close-date history was supplied, so 'not closing' covers past-due deals only.",
                (f"Stuck: an open deal longer in its current stage than 90% of completed stays in that stage (P90, at least {MIN_P90_RUNS} stays; "
                 f"same-day pass-throughs are not counted)." if inp.get("stage_p90") is not None else
                 f"Stuck compares each open deal with the median completed stay in its stage across other customers' deals (at least {MIN_STAYS} stays; "
                 f"same-day pass-throughs under {MIN_STAY_DAYS} day are not counted as stays)."),
-               (f"Pipeline created counts a deal on PIPELINE_CREATION_DATE (equal to the created date): {money(pipeline['not_yet_created']['acv'])} of open pipeline at "
+               (f"Pipeline created counts a deal when it reaches 03 - EVALUATE (PIPELINE_CREATION_DATE): {money(pipeline['not_yet_created']['acv'])} of open pipeline at "
                 f"{pipeline['not_yet_created']['as_of']} ({plural(pipeline['not_yet_created']['count'], 'deal')}, mostly earlier stages) has not reached it yet. "
                 "Pipeline age uses the opportunity created date, which every deal has.") if pipeline.get("not_yet_created") else None,
                (f"Headline pipeline, close quarters and the stage table are the PIPELINE_OVERVIEW snapshot at {pipeline['as_of']}; deal lists, stage age, "
                 f"not-closing and stuck are current state at {pipeline['deals_as_of']}.") if pipeline.get("as_of") != pipeline.get("deals_as_of") else None,
-               "No opportunity type was supplied, so recurring ACV is not split into new ARR and upsell ARR." if not risk["open"]["split_available"] else None,
+               "No opportunity type was supplied, so recurring ACV is not split into new sales and seat expansion." if not risk["open"]["split_available"] else None,
                f"{plural(risk['open']['no_family_lines'], 'open line')} ({money(risk['open']['no_family_acv'])}) {'has' if risk['open']['no_family_lines'] == 1 else 'have'} "
                "no product family and count as recurring." if risk["open"]["no_family_lines"] else None,
                "Stage history is kept as stage runs: close-date pushes are seen between runs (the close date at the end of each run, then today's)."]
     caveats += ["Close quarters on the month-end snapshot use the close date held at that date, grouped into fiscal quarters."
                 if inp.get("snapshot_ecq") is not None else None,
-                "Upsell ARR is ARR (Upsell): Upgrade, Renewal and Downgrade opportunities; renewals are booked as the ARR change on the renewal line."]
+                "Seat expansion is Seat Expansion opportunities; the view has no renewal flag, and renewals are not in the bookings."]
     caveats = [c for c in caveats if c]
     qc = {"status": "CLEAN" if all(c["result"] in ("PASS", "INFO") for c in checks) else "NOTES", "checks": checks, "caveats": caveats}
     capabilities = {"invoices": {"state": "not_available", "reason": "No invoice fact: recurring bookings stop at the won opportunity and non-recurring bookings at the income statement line."},
                     "renewals": {"state": "not_available", "label": "Renewals coming due",
-                                 "reason": "Renewal opportunities are in the view (opportunity type Renewal), but no subscription end date is held, so "
+                                 "reason": "Renewal opportunities are not in the view (only New Sales and Seat Expansion) and no subscription end date is held, so "
                                            "customers 1, 3 or 6 months from the end of their term, and how many have renewed, cannot be counted.",
-                                 "needs": "the subscription end date (not in the view)"},
+                                 "needs": "the subscription end date and the renewal opportunities (not in the view)"},
                     "discounts": {"state": "not_available", "label": "Discounting",
                                   "reason": "No list price or discount is held on opportunities, so the discount given to each customer and "
                                             "what a deeper or smaller discount would do to bookings cannot be read.",
@@ -1406,7 +1398,7 @@ def build(path, as_of=None, window=None, title=None, source=None, data_mode=None
             "as_of": {"label": as_of.strftime("%b %Y"), "name": as_of.strftime("%B %Y"), "month": month_name(as_of), "month_end": month_end(as_of).isoformat(),
                       "quarter": qlabel(as_of), "fiscal_year": f"FY{fy_of(as_of)}", "idx": as_idx},
             "fiscal": {"start_month": FY_START_MONTH, "year": f"FY{fy_of(as_of)}", "year_start": fy_start(as_of).isoformat(), "quarter": qlabel(as_of),
-                       "rule": "fiscal year is the calendar year, 1 January to 31 December"},
+                       "rule": "fiscal year 1 February to 31 January, named by the year it ends"},
             "primary_lens": {"id": prim_id, "reason": prim_reason},
             "scope": {"products": products, "subsidiaries": subs, "filtered_to": product, "note": None},
             "months": [mm.strftime("%b '%y") for mm in months], "months_of_history": len(months), "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
@@ -1456,7 +1448,7 @@ def _insights(L, signals, series, months, as_of):
         br = L.get("breadth") or {}
         bs, bp = br.get("subsidiary") or {}, br.get("product") or {}
         broad = (is_num(bs.get("share")) and bs["share"] >= BREADTH_SHARE and is_num(bp.get("share")) and bp["share"] >= BREADTH_SHARE)
-        mean_ = f"new ARR {money(new['variance'], True)}, upsell ARR {money(up['variance'], True)}, non-recurring {money(nr['variance'], True)}"
+        mean_ = f"new sales {money(new['variance'], True)}, seat expansion {money(up['variance'], True)}, non-recurring {money(nr['variance'], True)}"
         if broad:
             head = f"Broad-based {'growth' if var > 0 else 'decline'}."
         else:
@@ -1642,7 +1634,7 @@ def _add_ask_short(acts):
 
 def _pipeline_insights(L, pipeline, risk):
     """Executive summary for the Pipeline tab: velocity first, then what is exposed (high value, not closing, stuck)
-    and conversion. Weighted pipeline values; no targets. Every figure comes from the payload; each bullet says what it impacts."""
+    and conversion. Unweighted values; no targets. Every figure comes from the payload; each bullet says what it impacts."""
     v, h, op = L.get("velocity"), pipeline["in_quarter"], pipeline["open"]
     in_q = h.get("open")
     in_share = in_q / op if is_num(in_q) and op else None

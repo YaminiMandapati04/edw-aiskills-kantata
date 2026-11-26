@@ -16,8 +16,8 @@ Plus the `findings[]` you already wrote.
 ## Narrative standard
 
 **Executive summary, per tab** (`readout.summary.pipeline`, `readout.summary.bookings`): 3 to 5 short bullets, top-down.
-- Pipeline: what is at risk in the weighted pipeline (not closing, stuck, high-value deals), then conversion and creation (weighted pipeline dated to close in the next fiscal quarter, pipeline creation, at-risk pipeline, the straight-line scenario (weighted pipeline; there is no target or coverage)).
-- Bookings: total bookings first (the outcome, what led it, what it means), then the quality of the growth (new ARR against upsell ARR, deal size, dependence on a few customers or deals, win rate), then what to watch.
+- Pipeline: what is at risk in the open pipeline (not closing, stuck, high-value deals), then conversion and creation (open pipeline dated to close in the next fiscal quarter, pipeline creation, at-risk pipeline, the straight-line scenario (unweighted; there is no target or coverage)).
+- Bookings: total bookings first (the outcome, what led it, what it means), then the quality of the growth (new sales against seat expansion, deal size, dependence on a few customers or deals, win rate), then what to watch.
 - `head`: the bold conclusion, at most ten words, no figures ("Most of the pipeline is not closing.").
 - `text`: the line on the page, at most 30 words: observation, then what it means. The amounts are evidence, never the point.
 - `detail`: the full reading shown when the bullet is opened, at most 110 words.
@@ -44,7 +44,7 @@ Add the `readout{}` block to the diagnosis, set `payload_hash` to the payload's 
 
 ```bash
 python <SKILL_DIR>/scripts/validate_gtm_diagnosis.py --payload work/gtm_payload.json --diagnosis work/diagnosis_qtd.json
-python <SKILL_DIR>/scripts/render_gtm_dashboard.py --payload work/gtm_payload.json --diagnosis work/diagnosis_qtd.json --out outputs/yes_energy_pipeline_risk_readout.html
+python <SKILL_DIR>/scripts/render_gtm_dashboard.py --payload work/gtm_payload.json --diagnosis work/diagnosis_qtd.json --out outputs/pipeline_risk_readout.html
 ```
 
 A refused review is fixed in the diagnosis, never the payload. If it cannot be fixed in the time available, render with `--allow-missing-review`: the page then shows the engine reading and says "This view not AI reviewed", and you say so when handing it over.

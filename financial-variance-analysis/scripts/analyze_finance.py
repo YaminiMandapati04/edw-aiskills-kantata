@@ -47,50 +47,6 @@ def parse_materiality(s):
     return out
 
 
-ADJ_CLASS_LABEL = {"pro_forma": "pro forma", "capitalisation": "capitalised software and commissions, with their reversal"}
-
-
-def _slug(s):
-    return "".join(ch if ch.isalnum() else "_" for ch in str(s).lower()).strip("_")
-
-
-def adjustments_for_lens(frame, L):
-    """Per adjustment type, its actual impact on revenue, Adjusted EBITDA and net income over the lens window, and on the
-    prior-year window for the prior-year basis (the same months a year earlier, when in the extract). Profit-oriented:
-    a positive figure raised profit. Built from the extract rows, so it is inside every governed total."""
-    if not L.get("available") or not frame.adjustments:
-        return {"available": False, "types": [], "reason": "no adjustment rows carry actuals in this window" if L.get("available") else L.get("reason")}
-    s, e = L["range"]["start_idx"], L["range"]["end_idx"]
-    def tot(ms, lo, hi):
-        got = [m for m in ms if lo <= m["idx"] <= hi]
-        if not got:
-            return None
-        comp = {}
-        for m in got:
-            for k, v in m["components"].items():
-                comp[k] = round(comp.get(k, 0.0) + v, 2)
-        return {"rev": round(sum(m["rev"] for m in got), 2), "ebitda": round(sum(m["ebitda"] for m in got), 2),
-                "ni": round(sum(m["ni"] for m in got), 2), "months": len(got),
-                "components": [{"id": _slug(k), "label": k, "amount": v} for k, v in sorted(comp.items(), key=lambda kv: -abs(kv[1]))]}
-    types = []
-    for t, d in frame.adjustments.items():
-        a = tot(d["months"], s, e)
-        cpy = tot(d["months"], s - 12, e - 12) if L["basis"] == "py" and s >= 12 else None
-        if a is None and cpy is None:
-            continue
-        x = {"id": _slug(t), "label": t, "class": d["class"], "class_label": ADJ_CLASS_LABEL.get(d["class"], d["class"]),
-             "actual": a, "comparator": cpy if L["basis"] == "py" else None,
-             "ebitda_variance": round((a or {}).get("ebitda", 0.0) - (cpy or {}).get("ebitda", 0.0), 2) if L["basis"] == "py" else None}
-        types.append(x)
-    ebitda = {x["id"]: x for x in L["lines"]}.get("ebitda", {})
-    tot_a = round(sum((x["actual"] or {}).get("ebitda", 0.0) for x in types), 2)
-    return {"available": bool(types), "types": types, "total_ebitda_impact": tot_a,
-            "ebitda_excluding_adjustments": round(ebitda["actual"] - tot_a, 2) if is_num(ebitda.get("actual")) else None,
-            "basis_note": ("Comparator is the same months a year earlier." if L["basis"] == "py" else
-                           "The budget carries no pro forma rows; capitalisation is budgeted on the Capitalised Software / Commissions and Reversal accounts themselves (see those drivers)."),
-            "rule": "State which adjustments are included and their impact; capitalisation lowers Adjusted EBITDA and is reversed below it, so it is never a cost saving or overspend at net income."}
-
-
 def qc_checks(frame, model, args, mode):
     P = frame.periods
     as_of = P[model.as_of]
@@ -127,19 +83,9 @@ def qc_checks(frame, model, args, mode):
            f"The view's fiscal year and quarter disagree with fiscal_year_start_month {fc['start_month']} in config/scope.json: "
            + "; ".join(fc["mismatch"][:3]) + ". The page follows the view's columns; correct the setting."))
     if frame.adjustments:
-        parts, net_gaps = [], []
-        for t, d in frame.adjustments.items():
-            ms = d["months"]
-            parts.append(f"{t} ({ADJ_CLASS_LABEL.get(d['class'], d['class'])}), {ms[0]['period']} to {ms[-1]['period']} ({len(ms)} month(s))")
-            if d["class"] == "capitalisation":
-                net_gaps += [m["period"] for m in ms if abs(m["ni"]) > 1.0]
-        c("adjustments_included", "WARN" if net_gaps else "PASS",
-          "Manual adjustments are included, as the finance system reports them (never excluded): " + "; ".join(parts)
-          + ". Capitalised software and capitalised commissions are charged inside Adjusted EBITDA and reversed below it, so they move Adjusted EBITDA but not net income"
-          + (f"; the capitalisation and its reversal do not net to zero at net income in {', '.join(net_gaps[:6])}: ask the Controller." if net_gaps else ", and they net to zero at net income in every month.")
-          + " Capitalisation rows carry no subsidiary and show as '" + NO_SUB + "'.")
-    else:
-        c("adjustments_included", "PASS", "No pro forma or capitalisation adjustment rows carry actuals in the extract.")
+        c("adjustments_included", "PASS", "Group adjustment accounts (account type '" + str(load_scope().get("adjustment_account_type")) + "', below EBITDA, part of the "
+          "finance system's net income) are included: " + "; ".join(f"{n}, {m[0]} to {m[-1]} ({len(m)} month(s))" for n, m in frame.adjustments.items() if m)
+          + ". Rows with no subsidiary show as '" + NO_SUB + "'.")
     if frame.excluded:
         c("scope_exclusions", "PASS", "Excluded: " + "; ".join(f"{e}" for e, n in frame.excluded.items())
           + ". Scope reads " + json.dumps(model.scope_label) + ".")
@@ -258,8 +204,6 @@ def build(args):
         L["story"] = synthesis.story(model, L, lenses)
         L["kpi_diagnoses"] = synthesis.kpi_diagnoses(model, L, outlook)
         L["headline"] = explain.headline(model, L, outlook)
-    for L in lenses.values():                          # which manual adjustments sit in each window, and their impact
-        L["adjustments"] = adjustments_for_lens(frame, L)
     for L in lenses.values():                          # needs every lens's lines (the twin comparison) and its actions
         if L["available"]:
             L["summary"] = summary_mod.summary(model, L, lenses, outlook, signals)
@@ -284,7 +228,7 @@ def build(args):
                  "as_of": as_of, "as_of_label": as_of["label"], "primary_lens": {"window": args.window, "basis": args.basis, "id": primary},
                  "scope": {"subsidiaries": frame.subs, "filtered_to": frame.scope_subsidiary, "note": scope_note, "accounts": len(model.mapped), "unmapped": len(model.unmapped),
                            "excluded_subsidiaries": excl_named, "excluded_reasons": {e: scope_cfg.get("exclude_subsidiaries_reason", {}).get(e) for e in excl_named},
-                           "label": scope_label, "adjustments": {k: {"class": v["class"], "months": [m["period"] for m in v["months"]]} for k, v in frame.adjustments.items()},
+                           "label": scope_label, "adjustments": frame.adjustments,
                            "account_grain": "account number and name within subsidiary; class and department are drill detail; compared across subsidiaries where the budget is held on another entity",
                            "hierarchy": ["L3", "L4"] + (["L5"] if frame.has_l5 else []) + (["L6"] if frame.has_l6 else []) + ["account"] + (["class"] if frame.has_class else []),
                            "drill_dimensions": [d for d, f in (("subsidiary", True), ("class", frame.has_class), ("department", frame.has_department)) if f]},

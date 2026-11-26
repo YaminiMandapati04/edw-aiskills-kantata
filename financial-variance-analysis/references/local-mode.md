@@ -89,7 +89,7 @@ GROUP BY a.COA_MAPPING_L3 ORDER BY a.COA_MAPPING_L3;
 
 ```sql
 -- Headline cards (YTD): revenue, budget, prior year, Adjusted EBITDA, net income
--- fiscal year to date, Jan–Oct 2026 = FY2026 (calendar year): MTD / BUDGET_MTD / PY_MTD summed over the window's months, never the YTD columns
+-- fiscal year to date, Feb–Oct 2026 = FY2027: MTD / BUDGET_MTD / PY_MTD summed over the window's months, never the YTD columns
 SELECT SUM(CASE WHEN i.CHART_OF_ACCOUNT_KEY='-8' THEN i.MTD END) AS revenue_ytd,
        SUM(CASE WHEN i.CHART_OF_ACCOUNT_KEY='-8' THEN i.BUDGET_MTD END) AS revenue_budget_ytd,
        SUM(CASE WHEN i.CHART_OF_ACCOUNT_KEY='-8' THEN i.PY_MTD END) AS revenue_py_ytd,

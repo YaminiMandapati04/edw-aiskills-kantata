@@ -86,19 +86,6 @@ Cause-type tags for ranked movers (use in variance work): `volume`, `price`, `mi
 
 "Show me the GL lines behind that." "Which journal entries make up that account?"
 
-0. **Memo first for any "why".** For the accounts behind the main driver, pull `TRANSACTIONS_AND_ADJUSTMENTS.MEMO` with `TOTAL_IS_CONVERTED_AMT` grouped by memo for the period (`SOURCE_TYPE` in the dimensions; `LIMIT 25`, ordered by absolute amount). Read the memos to say what the postings were: accruals and reversals, payroll true-ups, fees, a capitalisation entry. Paraphrase them in accounting words; never quote a memo, a name or a document number. Adjustment rows (`SOURCE_TYPE = 'ADJUSTMENT'`) have no memo: explain them by `INCOME_STATEMENT.ADJUSTMENT_TYPE` and account (`view-finance.md` §3a).
-
-```sql
-SELECT MEMO, SOURCE_TYPE, SUM(TOTAL_IS_CONVERTED_AMT) AS amount, SUM(TRANSACTION_LINE_COUNT) AS lines
-FROM SEMANTIC_VIEW(
-  PROD_DB.SEMANTIC_VIEWS.FINANCE_ANALYTICS
-  DIMENSIONS TRANSACTIONS_AND_ADJUSTMENTS.MEMO, TRANSACTIONS_AND_ADJUSTMENTS.SOURCE_TYPE
-  METRICS    TRANSACTIONS_AND_ADJUSTMENTS.TOTAL_IS_CONVERTED_AMT, TRANSACTIONS_AND_ADJUSTMENTS.TRANSACTION_LINE_COUNT
-  WHERE      PERIOD.PERIOD_START_DATE = '<month start>' AND ACCOUNT.COA_MAPPING_L4 = '<driver L4>'
-)
-GROUP BY MEMO, SOURCE_TYPE ORDER BY ABS(SUM(TOTAL_IS_CONVERTED_AMT)) DESC LIMIT 25;
-```
-
 1. Look up the path in `semantic-views.md` §7 (drill-through paths). Move one hop at a time; carry forward the exact filters (period, entity, account, customer) so the detail ties to the number you just quoted.
 2. Query the row-level source with explicit columns, the carried filters, `ORDER BY` impact descending, and `LIMIT 100` (or the registry's row cap). Prefer a semantic view that reaches the grain; use an approved raw table only if it's listed.
 3. **Tie-out check:** sum the amount column over the *full* filtered set (a separate aggregate query, not just the limited rows) and confirm it equals the number you drilled from. State it: "These 14 GL lines total $4.2mm, matching the account figure." If it doesn't tie, say by how much and why you think so (timing, currency, a filter difference; GL lines are raw transaction currency while the marts are converted, and balance drills need the cumulative filter while flow drills need the exact range) — never paper over it.

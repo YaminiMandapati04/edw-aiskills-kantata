@@ -1,164 +1,198 @@
 # Semantic view registry (ARR)
 
-**Status: built from the live `DESCRIBE SEMANTIC VIEW PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS` and probes run 2026-11-23 (latest month end 2026-11-30).** The live definition wins if it changes.
+**Status: populated from the `ARR_ANALYTICS` MCP tool description and known domain conventions. Items marked **verify** need a first-run check (§9). Names are taken from the tool description; live `DESCRIBE SEMANTIC VIEW` wins if it disagrees.**
 
-This skill queries **one view**, `ARR_ANALYTICS`: the Maxio ARR waterfall and customer count bridges for Yes Energy, joined to the unified customer, product family, NetSuite accounting period and calendar dimensions. Bookings and pipeline belong to the GTM skill. P&L, balance sheet, cash and budget belong to the finance skill.
+This skill queries **one view**, `ARR_ANALYTICS`. Bookings and pipeline have their own GTM skill; P&L, balance sheet, cash flow and budget have their own Finance skill. Per-view detail lives in `view-arr.md`. Worked question patterns are in `question-patterns.md`.
 
 ## Contents
 1. Connection defaults
 2. Conventions
-3. Routing
-4. Words users say
+3. Routing: which table answers what
+4. Words users say, and what they mean
 5. Rules that always hold
 6. The view at a glance
 7. Drill-through paths
 8. Across views, and what cannot be answered
-9. First-run probes
+9. First-run probes and open items
 10. Approved example questions
 
 ---
 
 ## 1. Connection defaults
 
-| Setting | Default |
-|---|---|
-| Database / schema / view | `PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS` (`DEV_DB` only when the user asks) |
-| Warehouse | `MCP_WH`. Pass it on every `sql-exec` call, or `USE WAREHOUSE MCP_WH;` in Snowsight. |
-| Role | The read-only connector role. Never switch. |
-| Secrets (`SERVER_URL`, `OAUTH_*`) | Never read, print, log or write them. Don't open `.env`. |
-| Row cap for row-level output | 100 |
+The connector itself (MCP server, OAuth) is configured outside this skill. Names below are the environment variables the owner uses; read the non-secret ones if the environment exposes them, otherwise use the stated default.
+
+| Setting | Env var | Default |
+|---|---|---|
+| Database | `DATABASE` | `PROD_DB` (production; the default for every query. `DEV_DB` holds the development copy: use it only when the user asks) |
+| Schema holding the views | `DB_SCHEMA` | `SEMANTIC_VIEWS` |
+| ARR view | `ARR_VIEW` | `ARR_ANALYTICS` |
+| Warehouse | `WAREHOUSE` | `MCP_WH`. **Pass it in the `warehouse` field of every `sql-exec` call.** The connector rejects calls with no warehouse. |
+| Role / user | `ROLE`, `USER` | read-only connector role; never switch |
+| MCP endpoint and OAuth | `SERVER_URL`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_CLIENT_SECRET_2` | **secrets: never read aloud, print, log, or write into SQL, a bundle, a file or an answer.** Don't open `.env`; if a connection fails, say so and point the user to the connector settings. |
+| Row cap for row-level output | n/a | 100 |
+| Statement timeout | n/a | not set; on a timeout narrow the window or grain |
+
+Always fully qualify: `<DATABASE>.<DB_SCHEMA>.ARR_ANALYTICS`, for example `PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS`.
 
 ## 2. Conventions
 
 | Convention | Value |
 |---|---|
-| Currency | USD, actual currency converted at the **monthly average rate**. State it. |
-| Scale | `mn` with one decimal at $1mn or more, otherwise `k`. Negatives in brackets. |
-| Calendar | **Fiscal = calendar year** (Jan–Dec). `ACCOUNTING_PERIOD.FISCAL_QUARTER_YEAR` reads "Q4 2026" and `FISCAL_MONTH_YEAR` reads "November 2026". `CALENDAR.CALENDAR_MONTH_YEAR` reads "NOV-2026". YTD opens at 31 Dec of the prior year. |
-| Latest period | The latest month end in the data (2026-11-30 at build). Compare it with today's date and say when the open month is partial. |
-| Signs as stored | Beginning, New, Upsell and Ending are positive. Downsell and Churn are **negative**. FX is signed. Lost Customers is negative. |
-| Bridge lines shown | Beginning ARR · New · Upsell · Downsell (Operational) = `Downsell` · Downsell (Translational) = `FX` · Churn · Ending ARR |
-| No adjustments | Manual ARR adjustments are part of ARR, not a category. Never add an adjustment or "FX" line. |
-| Retention | Gross Dollar Retention and Net Dollar Retention are **dollar** metrics. The % versions are derived (÷ Beginning ARR, same window). Give one decimal. |
-| Customer | The unified customer across the Yes Energy, RTO, APAC and EMEA Maxio systems, counted once. A customer is active when total ARR > $10. |
-| Renewal carry | ARR of a customer with an open Salesforce renewal opportunity is carried for up to 12 months after its subscriptions end. A carried renewal that runs out becomes Churn. |
+| Reporting currency | USD. **State the basis in every answer.** |
+| Display scale | $ millions (`mn`) with one decimal for headline figures of $1mn or more, $ thousands (`k`) below that. Negatives in brackets. |
+| Calendar | **Fiscal**: Kantata's year runs 1 February to 31 January, named by the year it ends in (Feb 2026 to Jan 2027 = FY2027; Q1 Feb–Apr, Q2 May–Jul, Q3 Aug–Oct, Q4 Nov–Jan). `PERIOD.FY_YEAR` / `QUARTER` carry it, and the view's `TOTAL_QTD` / `TOTAL_YTD` are already fiscal (checked live 2026-11-18: YTD and QTD restart in February, QTD again in May). Say "fiscal" with every QTD / YTD figure. |
+| Latest period | Latest closed month-end unless the user names a period. The current open month may appear in the view; label it "partial month — not yet closed" and exclude it from bridge calculations unless the user asks. |
+| Data freshness | Compare the latest as-at date in the data with today's date and **say so when they differ**. Never judge staleness against the clock when the data itself lags. |
+| Movement signs | New ARR and Expansion ARR are positive and add to ending ARR. Contraction ARR and Churned ARR are shown as positive amounts (the magnitude of the reduction) but their effect on ending ARR is negative; display them in brackets when showing net impact. |
+| NRR / GRR | Rates expressed as a percentage; one decimal place. Never sum or average across groups — requery at the coarser grain. |
 
-## 3. Routing
+## 3. Routing: which table answers what
 
-| The user asks about | Logical table | Metrics |
+**verify** — confirm table names on first run with `DESCRIBE SEMANTIC VIEW`.
+
+| The user asks about | Expected table | Detail |
 |---|---|---|
-| Ending / beginning ARR, ARR bridge, New, Upsell, Downsell, Churn, FX, net new ARR, GDR, NDR | `ARR_WATERFALL` | `TOTAL_*_ARR`, `NET_NEW_ARR`, `GROSS_/NET_DOLLAR_RETENTION`, `TOTAL_MTD/QTD/YTD/LTM` + `TOTAL_PY_*`, `YOY_MTD_GROWTH` |
-| Customer counts: beginning, new, lost, ending, net change | `CUSTOMER_BRIDGE` | `TOTAL_BEGINNING/NEW/LOST/ENDING_CUSTOMERS`, `NET_CUSTOMER_CHANGE`, `TOTAL_MTD/QTD/YTD/LTM` + PY |
-| ARR by product family, customer × product | `ARR_BY_PRODUCT` | `TOTAL_ARR` (a balance) |
-| Cuts by customer, segment, industry, type, source system | `CUSTOMER` dims | joins to all three facts |
-| Product family | `PRODUCT.PRODUCT_FAMILY` | `ARR_BY_PRODUCT` only |
-| Fiscal period labels | `ACCOUNTING_PERIOD` | both bridges only |
-| Calendar labels | `CALENDAR` | `ARR_BY_PRODUCT` only |
-| Bookings, pipeline | GTM skill | |
-| Revenue, EBITDA, cash, budget | Finance skill | |
+| Current ARR balance, ending ARR by period, ARR growth rate | `ARR_OVERVIEW` or equivalent KPI mart | `view-arr.md` |
+| ARR movements: new, expansion, contraction, churn | `ARR_WATERFALL` or movement table | `view-arr.md` |
+| NRR, GRR, net dollar retention | `RETENTION_METRICS` or KPI mart | `view-arr.md` |
+| Logo counts: total, new, churned, net adds | `LOGO_METRICS` or movement table | `view-arr.md` |
+| Customer-level ARR detail, which customers expanded or churned | Row-level customer table | `view-arr.md` |
+| Bookings, pipeline, win rate | **not this skill**: GTM skill | |
+| Revenue, EBITDA, cash, budget | **not this skill**: Finance skill | |
 
-## 4. Words users say
+## 4. Words users say, and what they mean
 
-| User says | Means |
-|---|---|
-| ARR, current ARR, closing ARR | `TOTAL_ENDING_ARR` at the latest month end |
-| opening ARR | `TOTAL_BEGINNING_ARR` for the window |
-| new ARR, new logo ARR | `TOTAL_NEW_ARR`: a new customer whose first contract starts this month. A zero-ARR contract that later converts is Upsell. |
-| expansion, upsell, cross-sell | `TOTAL_UPSELL_ARR` |
-| downsell, contraction | Downsell (Operational) = `TOTAL_DOWNSELL_ARR`. **Total** downsell/contraction = Operational + Translational (derived). |
-| FX, currency impact, translational | **Downsell (Translational)** = `TOTAL_FX_ARR`. Never call it a separate FX line. |
-| churn, lost ARR | `TOTAL_CHURN_ARR`: the customer's ARR ended and never comes back |
-| net new ARR | `NET_NEW_ARR` = New + Upsell + Downsell (Operational) + Churn, **excluding** Translational. Ending − Beginning = Net new ARR + Downsell (Translational). |
-| GRR, gross retention, GDR | `GROSS_DOLLAR_RETENTION` ($). GDR % = ÷ Beginning ARR. |
-| NRR, net retention, NDR | `NET_DOLLAR_RETENTION` ($). NDR % = ÷ Beginning ARR. Excludes New and Translational. |
-| logos, customers, customer count | `CUSTOMER_BRIDGE` metrics |
-| logo churn rate | −`TOTAL_LOST_CUSTOMERS` ÷ `TOTAL_BEGINNING_CUSTOMERS` (derived) |
-| segment | `CUSTOMER.SEGMENT`: Physical, Financial, or NULL (RTO-only customers; show as "Not set") |
-| system, instance, RTO | `CUSTOMER.CUSTOMER_SOURCE`: Yes Energy, RTO, APAC, EMEA, Multiple |
-| product | `PRODUCT.PRODUCT_FAMILY` (balance only; includes "Unmapped") |
-| this quarter / YTD / LTM | Calendar = fiscal. Use `TOTAL_QTD` / `TOTAL_YTD` / `TOTAL_LTM` by `CATEGORY` at the window's last month end. |
+| User says | Means | Not |
+|---|---|---|
+| ARR, annual recurring revenue | Ending ARR for the period | Bookings ACV (GTM skill) |
+| new ARR, new logo ARR | ARR from customers new in the period (first subscription) | New bookings (GTM) |
+| expansion, upsell ARR | ARR added by existing customers (upsell, cross-sell, seat expansion) | Upsell bookings (GTM) |
+| contraction, downsell | ARR lost from existing customers who reduced but did not fully cancel | Churn |
+| churn, lost ARR | ARR from customers who fully cancelled; Churned ARR is the magnitude | A negative figure in the bridge; displayed in brackets |
+| net new ARR | New + Expansion − Contraction − Churn; the net movement for the period | Bookings (different measure and source) |
+| NRR, net dollar retention, net revenue retention | (Starting ARR + Expansion − Contraction − Churn) ÷ Starting ARR, over a trailing 12-month window | GRR, which excludes expansion |
+| GRR, gross revenue retention, gross dollar retention | (Starting ARR − Contraction − Churn) ÷ Starting ARR | NRR |
+| logo retention, customer retention | (Starting logos − Churned logos) ÷ Starting logos | Dollar retention (NRR/GRR) |
+| logo churn, customer churn | Churned logos ÷ Starting logos | ARR churn rate |
+| ARR churn rate | Churned ARR ÷ Starting ARR | Logo churn rate |
+| cohort | Customers first acquired in a given period; retention curve shows how their ARR evolves | Rolling retention (not cohort-based) |
+| segment | Customer segment dimension (e.g. Enterprise, Mid-Market, SMB) — **verify** members on first run | |
+| coverage | Pipeline ACV ÷ ARR target — this is a GTM metric, not an ARR metric | ARR |
 
 ## 5. Rules that always hold
 
 | Rule | What goes wrong if ignored |
 |---|---|
-| The bridge ties: Ending = Beginning + New + Upsell + Downsell (Op) + Churn + Downsell (Transl) | A bridge that doesn't tie implies a missing or invented movement |
-| FX only ever appears as Downsell (Translational) | Breaks the agreed reporting presentation |
-| Balances are read at one month end | Summing ending ARR across months multiplies ARR |
-| Filter `CATEGORY` or use per-category metrics with `TOTAL_MTD/QTD/YTD/LTM` | `TOTAL_MTD` summed over all categories adds Beginning, Ending and retention rows together |
-| Customer-count windows are independent | Summing 3 months of new customers double-counts a customer who came and went |
-| Bridge categories have no product grain | Showing "churn by product" from the bridge is impossible. Use product balances (derived). |
-| GDR/NDR % are not additive | Averaging segment rates misstates the total |
+| The bridge must foot | Starting ARR + New + Expansion − Contraction − Churn = Ending ARR. Presenting a bridge that does not foot implies a fabricated or missing movement. |
+| NRR and GRR are non-additive rates | Averaging NRR across segments or summing it across months gives nonsense. Requery at the target grain. |
+| One period anchor per question | "Current" means the latest closed month. "Q3" means the quarter-end. Never mix period anchors in one bridge. |
+| Internal test accounts are excluded from every query | Add `AND (CUSTOMER.ACCOUNT_ID IS NULL OR CUSTOMER.ACCOUNT_ID NOT IN (...))` with the five IDs in `config/excluded_accounts.json` (`scripts/account_scope.py clause`) inside the WHERE of every `ARR_ANALYTICS` query; `account_scope.py check` refuses a query without it. Both ARR_BRIDGE and CUSTOMER_BRIDGE join to CUSTOMER, so the one filter covers every metric. Without it, ARR includes a test account worth 0.5mn at Sep-26. Exclude by ID only, never by name: real customers whose names contain "test" stay in. |
+| `IS_LATEST` or the right as-at date on KPI cards | Without it, a card query returns one value per month-end, inflating aggregates. |
+| New vs expansion are distinct movements | A customer renewing with the same ARR generates no movement. A customer who is new in one month cannot also expand that month (they had no prior ARR). Never mix the two. |
+| Contraction and churn are different | Contraction: customer still active, lower ARR. Churn: customer fully cancelled. Presenting churn as contraction understates the severity of a loss. |
+| Logo and dollar retention answer different questions | A high-ARR customer churning has a large dollar impact but counts as one logo. Report both when the question is about retention health. |
 
 ## 6. The view at a glance
 
 | | `ARR_ANALYTICS` |
 |---|---|
-| Source | Maxio (Yes Energy, RTO, APAC, EMEA instances). Renewal carry from Salesforce. Fiscal calendar from NetSuite. |
-| Base tables | `PROD_DB.REPORTING.RPT_ARR_BRIDGE`, `PROD_DB.REPORTING.RPT_CUSTOMER_BRIDGE`, `PROD_DB.GOLD.FACT_ARR`, `PROD_DB.GOLD.DIM_MAXIO_CUSTOMER`, `PROD_DB.GOLD.DIM_MAXIO_PRODUCT`, `PROD_DB.GOLD.DIM_DATE`, `PROD_DB.GOLD.DIM_ACCOUNTING_PERIOD` |
-| Grain | Customer × category × month (bridges). Customer × product family × month (ARR by product). |
-| Time | Month-end dates. MTD / QTD / YTD / LTM plus prior year. |
+| Business area | ARR bridge, retention, logo counts |
+| Source systems | Billing / subscription system (ERP or billing platform; **verify**) |
+| Metrics | Starting ARR, Ending ARR, New ARR, Expansion ARR, Contraction ARR, Churned ARR, Net New ARR, NRR, GRR, Logo counts (total, new, churned), ARR growth rate |
+| Key dimensions | Customer, segment, product, month / quarter |
+| Time basis | Month-end as-at dates; trailing-12-month windows for NRR/GRR |
+| Detail file | `view-arr.md` |
 
 ## 7. Drill-through paths
 
-| Domain | Hop | From → To | Filter carried |
-|---|---|---|---|
-| Bridge | 1 | Ending ARR → bridge category | window |
-| Bridge | 2 | category → segment / source system / industry / customer type | window, category |
-| Bridge | 3 | attribute → customer (≤100 rows) | window, category, attribute |
-| Translational | 1 | Downsell (Translational) → source system (APAC / EMEA / Multiple carry FX) | window |
-| Translational | 2 | source → customer | window, source |
-| Customers | 1 | net change → new / lost | window |
-| Customers | 2 | new / lost → customer list | window, category |
-| Product | 1 | Ending ARR → product family (balance) | month end |
-| Product | 2 | product family → customer | month end, family |
+Approved source is **the view only**. No raw tables. One hop at a time; carry the filters forward.
 
-Customer is the finest grain. There is no subscription, invoice or contract grain.
+| Domain | Hop | From | To | Filter carried |
+|---|---|---|---|---|
+| ARR bridge | 1 | total | movement type (New / Expansion / Contraction / Churn) | period |
+| ARR bridge | 2 | movement type | product, segment | period, movement type |
+| ARR bridge | 3 | segment / product | customer list | period, movement type |
+| Retention | 1 | NRR / GRR rate | segment, product | trailing-12M window |
+| Retention | 2 | segment | customer-level expansion / contraction / churn | segment, period |
+| Logo | 1 | net logo adds | new logos, churned logos | period |
+| Logo | 2 | churned logos | customer list | period |
+
+**Where drill stops.** Customer is the finest grain in the view; there is no subscription-line or invoice grain. Say where the data stops rather than inventing the next hop.
 
 ## 8. Across views, and what cannot be answered
 
+Questions that need another view:
+
+| Question | Route |
+|---|---|
+| Bookings, closed-won ACV, pipeline | GTM skill |
+| Revenue on the income statement, EBITDA, cash, budget variance | Finance skill |
+| ARR vs bookings reconciliation (booked not yet in ARR, ARR with no booking) | Governed by joining ARR and GTM views; note the two views have different customer keys — a data-team reconciliation view is the right long-term answer; offer to compare at product × month level as a *derived candidate* |
+
+**Cannot be answered from this view.** Reply with the gap and the nearest honest alternative; never improvise.
+
 | Ask | Why not | Offer instead |
 |---|---|---|
-| New / Upsell / Downsell / Churn by product | Buckets are decided on customer total | Product balance change between month ends (derived) |
-| Invoice, subscription line, contract detail | No such grain | Customer-level movements |
-| ARR by region | No region dimension | Source system (APAC, EMEA, Yes Energy, RTO) as a proxy, labelled |
-| Cohort retention curves | No first-ARR-date dimension | Customer bridge new/lost trend. A cohort is derived only if built from monthly customer balances, labelled. |
-| Renewal win/loss rate, bookings | GTM data | GTM skill |
-| CAC, LTV, payback | Needs finance cost | Finance skill plus ARR inputs |
-| ARR target / budget variance | No ARR plan in the view | Prior month / prior year |
-| FX at constant currency rates | Only the FX movement is held | Downsell (Translational) by month and source |
+| Invoice-level or billing-event detail | No invoice grain in the view | Customer-level ARR movements; ask the data team for a billing-event view |
+| Renewal win / loss rate | Renewals that cancel become churn; renewals that renew generate no movement (net-zero) | Logo and dollar churn rate; GRR as the renewal-health proxy |
+| CAC, LTV, payback | Needs S&M cost from the finance view | ARR growth, NRR and churn rate as inputs |
+| Seat-level or usage-level breakdown | Not in the view | ARR by product and segment |
+| ARR by region | No region dimension — **verify** | Segment or product |
+| Bookings plan vs ARR target variance | Needs a bookings plan (GTM view has none) and an ARR target | NRR trend, net new ARR vs prior period / prior year |
 
-## 9. First-run probes
+## 9. First-run probes and open items
+
+Run these once per session as needed, to turn "verify" into fact. Each is a read-only statement; run it through `sql_guard.py` first.
 
 ```sql
+-- Confirm the view exists and list its tables
 DESCRIBE SEMANTIC VIEW PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS;
 
--- Latest month end and its bridge (should tie)
-SELECT * FROM SEMANTIC_VIEW(PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
-  DIMENSIONS ARR_WATERFALL.ARR_MONTH_END
-  METRICS ARR_WATERFALL.TOTAL_BEGINNING_ARR, ARR_WATERFALL.TOTAL_ENDING_ARR, ARR_WATERFALL.TOTAL_FX_ARR)
-ORDER BY ARR_MONTH_END DESC LIMIT 1;
+-- Latest available month-end
+SELECT MAX(AS_OF_DATE) AS LATEST_DATE
+FROM SEMANTIC_VIEW(
+  PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
+  DIMENSIONS ARR_OVERVIEW.AS_OF_DATE
+  METRICS    ARR_OVERVIEW.ENDING_ARR_USD
+);
 
--- Category members
-SELECT * FROM SEMANTIC_VIEW(PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
-  DIMENSIONS ARR_WATERFALL.CATEGORY METRICS ARR_WATERFALL.TOTAL_MTD
-  WHERE ARR_WATERFALL.ARR_MONTH_END = '2026-11-30');
+-- Segment members (verify dimension name)
+SELECT DISTINCT SEGMENT
+FROM SEMANTIC_VIEW(
+  PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
+  DIMENSIONS ARR_OVERVIEW.SEGMENT
+  METRICS    ARR_OVERVIEW.ENDING_ARR_USD
+)
+ORDER BY SEGMENT;
+
+-- Movement type members (verify dimension name)
+SELECT DISTINCT MOVEMENT_TYPE
+FROM SEMANTIC_VIEW(
+  PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
+  DIMENSIONS ARR_WATERFALL.MOVEMENT_TYPE
+  METRICS    ARR_WATERFALL.MOVEMENT_ARR_USD
+)
+ORDER BY MOVEMENT_TYPE;
 ```
 
-Known members at build:
-- ARR categories: Beginning ARR, New, Upsell, Downsell, Churn, FX, Ending ARR, Gross Dollar Retention, Net Dollar Retention.
-- Customer categories: Beginning Customers, New Customers, Lost Customers, Ending Customers.
-- Segments: Physical, Financial, NULL.
-- Sources: Yes Energy, RTO, APAC, EMEA, Multiple.
-- About 45 product families, including Unmapped.
+Open items:
+
+| # | Item | Until resolved |
+|---|---|---|
+| 1 | Exact table names inside `ARR_ANALYTICS` unknown until `DESCRIBE` runs | Use templates in `view-arr.md`; adjust on the first error |
+| 2 | Dimension member values (segment names, movement type strings) not yet verified | Probe members before writing filters; never guess a literal |
+| 3 | Fiscal year starts in February | QTD / YTD and quarter labels are fiscal (FY2027 Q3 = Aug–Oct 2026); a calendar quarter or year must be summed from `TOTAL_MTD` and labelled calendar |
+| 4 | NRR / GRR window definition (trailing 12M vs rolling cohort) not confirmed | Use `DESCRIBE` and the view's metric comment; state the definition used |
 
 ## 10. Approved example questions
 
-- What is our ARR at the end of November, and how is it moving?
-- Walk me through the Q4 2026 ARR bridge, including the translational downsell.
-- What are YTD gross and net dollar retention, in dollars and %, vs last year?
-- Which customers drove the November downsell?
-- How much ARR did FX take off this year, and in which Maxio system?
-- How many customers did we add and lose YTD?
-- What is ARR by product family, and which families grew most since December?
-- How does ARR split between the Physical and Financial segments?
+- What is our current ARR, and how fast is it growing?
+- Walk me through the ARR bridge for Q3 — where did we gain and lose?
+- What is our NRR this year, and how has it trended over the last 12 months?
+- Which customers churned last quarter, and how much ARR did we lose?
+- Which existing customers expanded the most, and in which products?
+- What is our logo retention rate, and how does it compare to the prior year?
+- Break down ARR by segment and show me the net new ARR for each.
+- Which segment has the highest churn rate?
+- Show me the ARR cohort curve for customers acquired in 2024.

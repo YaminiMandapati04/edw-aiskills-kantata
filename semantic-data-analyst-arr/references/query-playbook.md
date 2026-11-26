@@ -1,93 +1,148 @@
 # Query playbook (ARR)
 
-These are recipes for each question type against `PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS`. The templates themselves are in `view-arr.md` §5, all verified live. Every statement goes through `python scripts/sql_guard.py` first, and the warehouse is `MCP_WH`.
+Recipes for each ARR question type. The goal in every one is the same: answer from governed metrics, decompose until the mechanism is visible, and keep fact, derived and scenario separate.
+
+> **Syntax caveat.** The statements below reflect documented Snowflake semantic-view syntax and known ARR domain conventions, but were written without access to a live account. Ready-to-adapt templates with real metric and dimension names are in `view-arr.md` §5. The first time you use each form in a session, if it errors, read the error, adjust, and carry on — don't abandon the governed route for raw tables on the first syntax failure.
 
 ## Contents
-1. Discovery and base form
-2. Pulse
-3. Why / driver
-4. Bridge, drills and translational downsell
-5. Customer counts
-6. Product
-7. Trend
-8. Sanity checks
-9. When the view can't answer
+1. Discovery and the base query form
+2. Pulse questions
+3. Why / driver questions
+4. Bridge (waterfall)
+5. Trend and seasonality
+6. Cohort retention
+7. Sanity checks before you answer
+8. When the view can't answer it
 
 ---
 
-## 1. Discovery and base form
+## 1. Discovery and the base query form
+
+**Discovery** (use when confirming "verify" items, when the user asks what's available, or on a first-run check):
 
 ```sql
+SHOW SEMANTIC VIEWS IN SCHEMA PROD_DB.SEMANTIC_VIEWS;
 DESCRIBE SEMANTIC VIEW PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS;
-SHOW SEMANTIC METRICS IN PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS;
+SHOW SEMANTIC DIMENSIONS IN PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS;
+SHOW SEMANTIC METRICS    IN PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS;
 ```
+
+`SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW` is blocked by `sql_guard.py`; use `DESCRIBE` instead.
+
+**Base query form:**
 
 ```sql
-SELECT <dims>, <metrics>
-FROM SEMANTIC_VIEW(PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
-  DIMENSIONS <table>.<dim>, ...
-  METRICS    <table>.<metric>, ...
-  WHERE      ARR_WATERFALL.ARR_MONTH_END = '2026-11-30')
-ORDER BY ... LIMIT 100;
+SELECT <dimension_a>, <dimension_b>, <metric_x>
+FROM SEMANTIC_VIEW(
+    PROD_DB.SEMANTIC_VIEWS.ARR_ANALYTICS
+    DIMENSIONS <logical_table>.<dimension_a>, <logical_table>.<dimension_b>
+    METRICS    <logical_table>.<metric_x>
+    WHERE      <logical_table>.<dimension_a> BETWEEN '2026-01-31' AND '2026-09-30'
+)
+ORDER BY <metric_x> DESC
+LIMIT 50;
 ```
 
-- Metrics aggregate to the listed dimensions. The `WHERE` inside `SEMANTIC_VIEW` filters dimensions. Filter metric results in an outer `WHERE`.
-- Mixing `ARR_WATERFALL` metrics with `CUSTOMER_BRIDGE` metrics in one call is not supported. Query them separately and join on the month in an outer query.
-- Product dimensions work only with `ARR_BY_PRODUCT.TOTAL_ARR`.
+Notes:
+- Metrics aggregate to the grain of the dimensions you list. Add or remove dimensions to change the grain.
+- NRR and GRR are non-additive rates; if you need them at a coarser grain, re-query at that grain — never average them from finer results.
+- Always pin the time window explicitly through `AS_OF_DATE`. State the window in the answer.
+- Filter literal values (segment names, movement type strings) must be real members; probe them (`semantic-views.md` §9) rather than guessing.
+- Run every statement through `python scripts/sql_guard.py` first.
 
-## 2. Pulse
+---
 
-"What is our ARR?" Read `TOTAL_ENDING_ARR` at the latest month end, and also at the prior month end and the same month last year (`TOTAL_PY_MTD` with `CATEGORY = 'Ending ARR'`, or query that date). Report the level, MoM and YoY change in $ and %, and the latest NDR % and GDR % (5c). Say USD at the monthly average rate.
+## 2. Pulse questions
 
-## 3. Why / driver
+"What is our current ARR?" "What is NRR this quarter?"
 
-1. Run the bridge for the window (5a or 5b) and confirm it ties.
-2. Rank the movements by absolute size: New, Upsell, Downsell (Op), Downsell (Transl), Churn. Compare with the prior month or prior year to find what changed.
-3. Drill the largest movement by `SEGMENT`, `CUSTOMER_SOURCE` or `INDUSTRY` (5h pattern), then by customer (5d), capped at 100.
-4. State the concentration (top 3 customers' share of the movement). Name a business reason only when a field shows it. Otherwise, name who can confirm it (Customer Success, RevOps, Revenue Accounting).
+1. Resolve the period (latest closed month-end unless stated) and the comparison (prior-year same month by default; say so).
+2. Query the KPI mart with `IS_LATEST = TRUE` for the card; for a comparison, also query the prior-year equivalent.
+3. Answer: the number, the change in $ and %, and one sentence on what's notable. If the change is large or in the wrong direction, proactively run the §3 decomposition rather than asking.
 
-## 4. Bridge, drills and translational downsell
+---
 
-**Standard presentation** (always in this order):
+## 3. Why / driver questions
 
-| Line | Source |
-|---|---|
-| Beginning ARR | `TOTAL_BEGINNING_ARR` / CATEGORY 'Beginning ARR' |
-| New | `TOTAL_NEW_ARR` |
-| Upsell | `TOTAL_UPSELL_ARR` |
-| Downsell (Operational) | `TOTAL_DOWNSELL_ARR` / CATEGORY 'Downsell' |
-| Downsell (Translational) | `TOTAL_FX_ARR` / CATEGORY 'FX' |
-| Churn | `TOTAL_CHURN_ARR` |
-| **Ending ARR** | `TOTAL_ENDING_ARR`, which must equal the sum of the lines above |
+"Why did ARR growth slow?" "What drove the NRR drop?"
 
-Optional memo lines: Total Downsell (Op + Transl, derived), Net new ARR (`NET_NEW_ARR`, excludes Translational), GDR $ / %, NDR $ / %.
+1. **Confirm the move.** Current ending ARR vs prior period (or prior year), in $ and %. If the move is small relative to normal fluctuation, say so before explaining.
+2. **Decompose by movement type.** From `ARR_WATERFALL`: how much of the change came from each of New / Expansion / Contraction / Churn? Each movement's contribution and its share of total net new ARR.
+3. **Decompose by segment and product.** Which segments or products drove each movement type? Rank by absolute dollar impact. Keep the top 5–8 and an "all other" row so the parts sum to the total.
+4. **Identify the concentration.** "Three customers account for 68% of the churn" is a finding. A flat spread is also a finding.
+5. **Drill to customers** for the dominant movement. Name the top churned or expanded customers (capped at 100 rows).
+6. **State the mechanism and its evidence level.**
+   - *Established*: "Churn increased by $1.2mn, 80% of which came from two Enterprise customers in the Professional Services product."
+   - *Not in the data*: never invent or hint at a reason. End at the deepest level the data supports and name who can take it further.
+7. **Write it** as `chat-answers.md` describes: the key number first, then the insight, in the shape the question needs.
 
-Never show a separate FX, currency, adjustment or "other" step. If the tie-out (5a `TIE_OUT`) is not 0 within $0.01, stop and report the gap.
+Cause-type tags for ranked movers: `new logo growth`, `expansion`, `contraction`, `logo churn`, `mix shift`, `one-off`, `unexplained`. Tag only from evidence; `unexplained` is a legitimate answer.
 
-**4b Drills.** Use 5d with the category filter: 'New', 'Upsell', 'Downsell', 'Churn' or 'FX'. Each customer list must sum to the category total. Show "All other" for the remainder beyond the cap.
+---
 
-**4c Translational.** Use 5e by `CUSTOMER_SOURCE` and then 5d with `CATEGORY = 'FX'` by customer. Translational downsell comes from non-USD contracts (APAC, EMEA, Multiple), so Yes Energy- and RTO-only customers normally show 0. An FX gain is a positive Translational downsell, a favourable offset: say "favourable" rather than calling it upsell.
+## 4. Bridge (waterfall)
 
-## 5. Customer counts
+"Show me the ARR bridge for Q3." "Walk me through how ARR moved last month."
 
-Use 5f. For QTD, YTD or LTM, use the window metrics at the window's last month end, never a sum of months. Logo churn rate = −Lost ÷ Beginning for the same window (derived). Pair the counts with dollars when the question is about retention health: one large customer can move the dollars while the counts barely change.
+1. Query `ARR_WATERFALL` for each movement type summed over the period. Also query `ARR_OVERVIEW` for the starting and ending balances.
+2. Lay out the bridge:
+   - Starting ARR (from `ARR_OVERVIEW`)
+   - + New ARR
+   - + Expansion ARR
+   - − Contraction ARR (in brackets)
+   - − Churned ARR (in brackets)
+   - = Ending ARR
+3. **Foot-check (mandatory):** Starting + New + Expansion − Contraction − Churn must equal Ending ARR to the cent. If it does not, say the gap and the likely cause (rounding, partial month, unclassified movements) before presenting the bridge.
+4. Drill a step by product or customer only when the question asks for it or the driver needs it.
 
-## 6. Product
+For quarterly bridges, sum monthly movements rather than re-querying at a quarterly grain if the view does not expose quarter-level aggregation — but state which approach you used. Quarters are **fiscal** (the year starts 1 February: Q1 Feb–Apr, Q2 May–Jul, Q3 Aug–Oct, Q4 Nov–Jan, FY named by its end); the view's `TOTAL_QTD` / `TOTAL_YTD` already follow it, so monthly sums must use the same months.
 
-Use 5g. Product family ARR is a balance. The change between two month ends is *derived* and includes translational effects. It is not a New, Upsell or Downsell split, so say that once. The families sum to Ending ARR; keep Unmapped and the negative families.
+---
 
-## 7. Trend
+## 5. Trend and seasonality
 
-Use 5a over 13 to 24 months. Ending ARR is a line (balances, one per month). Bridge flows are columns. A rolling 12-month view is `TOTAL_LTM` by CATEGORY at each month end. Call a change persistent only when 3 or more consecutive months show it.
+"How has NRR trended over the last 12 months?" "Is ARR growth accelerating?"
 
-## 8. Sanity checks
+1. Pull the metric monthly over at least 12 months (24+ for seasonality); prefer a full year of comparisons.
+2. Derive and label as *derived*: mean, standard deviation, the best and worst months, and the year-over-year change at each point.
+3. Interpret against something: prior-year window, the trailing 12-month level, or a target rate. A standalone "NRR is 108%" means nothing to a reader without context.
+4. Trace swings to drivers: a single large customer churning inflates the churn rate in one month — it is an event, not a trend.
+5. For NRR / GRR trends, label the window definition (trailing 12M) in every data point; a one-month "NRR" is a different calculation from the standard trailing-12M rate.
 
-1. The bridge ties, and the per-customer drill sums to its category.
-2. Product families at a month end sum to `TOTAL_ENDING_ARR`.
-3. `NET_CUSTOMER_CHANGE` = Ending − Beginning customers.
-4. Balances are not added across months, and customer windows are not summed.
-5. The latest month is labelled partial if open.
+---
 
-## 9. When the view can't answer
+## 6. Cohort retention
 
-Use `semantic-views.md` §8 and the standard replies in `question-patterns.md` §4.
+"Show me the ARR retention curve for customers acquired in 2024."
+
+1. Filter `CUSTOMER_ARR` or `ARR_WATERFALL` to customers first appearing (New ARR movement) in the cohort period.
+2. For each subsequent month, compute: Retained ARR ÷ Cohort's initial ARR. Present as a percentage series from Month 0 (100%) through the latest closed month.
+3. Label as *derived* (the view may not expose a pre-built cohort metric; you are constructing it from row-level data). State whether the view exposes this directly or whether you are building it from the customer table.
+4. Cap the customer list at 100 when showing the underlying data.
+5. Offer to compare cohorts (2023 vs 2024 vs 2025) if data is available.
+
+---
+
+## 7. Sanity checks before you answer
+
+- Starting ARR + Net New ARR = Ending ARR (or Starting + New + Expansion − Contraction − Churn = Ending ARR if showing all components).
+- Period and filters in the answer match those in the query.
+- Units and scale match the registry (`mn` for $1mn+, `k` below that; not $ vs $mn confusion). Currency basis named (USD).
+- NRR and GRR are rates, not sums; the window definition is stated.
+- Logo counts: new logos and churned logos tie to the net logo add figure.
+- Movement signs are correct: Contraction and Churn reduce ending ARR; shown in brackets in the bridge.
+- Row-level drills tie to the summary number they came from (run the aggregate query to confirm before showing rows).
+- Partial months flagged; never compare an open month with a closed one without saying so.
+- Empty results reported as such, not interpreted as zero.
+
+---
+
+## 8. When the view can't answer it
+
+Say what's missing and offer the closest honest alternative:
+
+- **Dimension not in the view** (e.g. "by region"): say so; offer the nearest available cut (segment or product).
+- **Grain too coarse** (e.g. "subscription-line ARR"): say where the data stops (customer is the finest grain).
+- **Metric not defined**: don't improvise a definition for a governed term. Offer a clearly-labelled *derived* proxy only if it is useful, and say it isn't the governed metric.
+- **No data for the period**: report that, with the data's actual date range.
+- **On the registry's "cannot be answered" list**: give the standard reply (`question-patterns.md` §5) and the nearest governed alternative. Label any proxy *derived*, never governed.

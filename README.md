@@ -1,6 +1,6 @@
-# Yes Energy EDW AI Skills
+# Kantata EDW AI Skills
 
-Claude skills for Yes Energy that answer finance, ARR and go-to-market questions, and build reporting deliverables, from the governed Snowflake semantic views in `PROD_DB.SEMANTIC_VIEWS`.
+Claude skills for Kantata that answer finance, ARR and go-to-market questions, and build reporting deliverables, from the governed Snowflake semantic views in `PROD_DB.SEMANTIC_VIEWS`.
 
 Each skill is a self-contained folder with a `SKILL.md` (the instructions Claude follows), plus the scripts, references and assets it needs. Deterministic scripts compute every number; the model runs the queries, hands the results to the scripts and relays the output. It never types or calculates a figure itself.
 
@@ -28,25 +28,15 @@ Each skill is a self-contained folder with a `SKILL.md` (the instructions Claude
 
 Not every skill has every folder. Runtime folders `work/` (intermediate extracts) and `outputs/` (deliverables) are created during a run and are git-ignored.
 
-## Report destinations
+## Outputs
 
-Reports are built locally in `outputs/` and then published to a Snowflake internal stage in `MCP_DB.MCP_SCHEMA` with each skill's `scripts/upload_to_stage.py` (a `PUT`, overwriting the same file name, then a `LIST` to confirm). Override with `--stage`, `--subpath`, `--connection` or `--warehouse`.
-
-| Skill | Stage |
-|---|---|
-| semantic-data-analyst-arr | `@MCP_DB.MCP_SCHEMA.STG_ARR_REPORT` |
-| financial-variance-analysis | `@MCP_DB.MCP_SCHEMA.STG_FINANCE_REPORT` |
-| pipeline-and-booking-risk | `@MCP_DB.MCP_SCHEMA.STG_GTM_REPORT` |
-| chronograph-generator | `@MCP_DB.MCP_SCHEMA.STG_CHRONOGRAPH_REPORT` |
-
-The role in the connection needs `WRITE` on each stage (for internal stages).
+Each run builds its deliverables locally in `outputs/` (git-ignored), named for the as-of month where relevant. Intermediate extracts go to `work/`.
 
 ## Requirements
 
 - Python 3.12 or later
-- `pip install -r requirements.txt`
-- `snowflake-connector-python` and a connection in `~/.snowflake/connections.toml` (used for the stage upload and the chronograph queries)
-- A Snowflake connection to `PROD_DB.SEMANTIC_VIEWS` (normally via MCP in the Claude session). The chronograph needs a live connection and has no sample mode.
+- `pip install -r requirements.txt` (openpyxl, matplotlib)
+- A Snowflake connection to `PROD_DB.SEMANTIC_VIEWS` (via MCP in the Claude session; the skills run the queries and hand the results to the scripts). The chronograph needs a live connection and has no sample mode.
 - Chronograph only: Windows with desktop Excel for the open-in-Excel check (`excel_open_check.ps1`, `excel_finalize.ps1`).
 
 ## Using a skill
@@ -56,7 +46,7 @@ Install or point Claude at the skill folder, then ask in plain English, for exam
 - "What is our ARR, and why did NDR drop last quarter?"
 - "Why did EBITDA miss budget?" / "Run the month-end finance review"
 - "Run this month's GTM dashboard"
-- "Refresh the Yes Energy CFO Chronograph for October"
+- "Refresh the Kantata CFO Chronograph for October"
 
 Each `SKILL.md` description lists its triggers and what it does not cover.
 

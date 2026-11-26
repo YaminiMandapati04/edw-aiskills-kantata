@@ -9,19 +9,9 @@ subsidiary; class and department are drill detail beneath it. Where the budget
 for an account is held on some subsidiaries while actuals post on others, the
 account is compared across subsidiaries (the budget's own grain) and the
 subsidiary split becomes drill detail too. The summary roll-up keys in
-config/scope.json are dropped. The capitalisation keys in config/scope.json
-(-8001 Capitalised Software, -8002 Capitalised Commissions, -8003 Reversal of
-Capitalised Portions) are real rows and are kept; any other negative key
-refuses the build.
-
-Adjustments. INCOME_STATEMENT.ADJUSTMENT_TYPE marks the manual adjustment rows:
-'Pro Forma Actuals' and 'Pro Forma Adjustments' (pro forma) and 'Adjustment for
-Capitalized expenses' (capitalised software and commissions charged inside
-Adjusted EBITDA, with their reversal below EBITDA, so the pair nets to zero at
-net income). They are never excluded: they are part of the governed revenue,
-Adjusted EBITDA and net income. frame.adjustments keeps, per adjustment type,
-the monthly actual impact on revenue, Adjusted EBITDA and net income, so every
-surface can say which adjustments are included and what they did.
+config/scope.json are dropped. Negative keys whose ACCOUNT_TYPE is the
+configured adjustment type (group-level adjustments, often with no subsidiary)
+are real rows and are kept; any other negative key refuses the build.
 
 Signs. When the extract carries ACCOUNT.P_AND_L_MULTIPLIER, the view stores
 values unsigned and the multiplier gives each account its profit orientation
@@ -29,7 +19,7 @@ values unsigned and the multiplier gives each account its profit orientation
 so the rows sum to net income.
 
 Fiscal calendar. Quarters and years come from the view's PERIOD.QUARTER / YEAR
-(fiscal = calendar year at Yes Energy); config/scope.json fiscal_year_start_month (1 = January) fills them
+(fiscal); config/scope.json fiscal_year_start_month (2 = February) fills them
 when absent and is checked against them when present (frame.fiscal)."""
 import csv
 import datetime as dt
@@ -43,7 +33,7 @@ NEEDED = ["PERIOD_START_DATE", "CHART_OF_ACCOUNT_KEY", "ACCOUNT_NAME", "COA_MAPP
           "TOTAL_MTD", "TOTAL_PY_MTD", "TOTAL_BUDGET_MTD"]
 SCOPE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "scope.json")
 NO_CLASS, NO_DEPT = "No class", "No department"
-NO_SUB = "Group level (no subsidiary)"                  # rows the view holds without a subsidiary (capitalisation adjustments)
+NO_SUB = "Group level (no subsidiary)"                  # rows the view holds without a subsidiary (group adjustments)
 
 
 def load_scope(path=None):
@@ -109,7 +99,7 @@ def rows_from_workbook(path):
             "CHART_OF_ACCOUNT_KEY": a["CHART_OF_ACCOUNT_KEY"], "ACCOUNT_NUMBER": a.get("ACCOUNT_NUMBER"), "ACCOUNT_NAME": a["ACCOUNT_NAME"],
             "COA_MAPPING_L2": a.get("COA_MAPPING_L2"), "COA_MAPPING_L3": a.get("COA_MAPPING_L3"),
             "COA_MAPPING_L4": a.get("COA_MAPPING_L4"), "COA_MAPPING_L5": a.get("COA_MAPPING_L5"), "COA_MAPPING_L6": a.get("COA_MAPPING_L6"),
-            "CLASS_NAME": r.get("CLASS_NAME"), "DEPARTMENT_NAME": r.get("DEPARTMENT_NAME"), "ADJUSTMENT_TYPE": r.get("ADJUSTMENT_TYPE"),
+            "CLASS_NAME": r.get("CLASS_NAME"), "DEPARTMENT_NAME": r.get("DEPARTMENT_NAME"),
             "TOTAL_MTD": r.get("MTD"), "TOTAL_PY_MTD": r.get("PY_MTD"), "TOTAL_BUDGET_MTD": r.get("BUDGET_MTD")})
     return out
 
@@ -133,8 +123,7 @@ class Frame:
             raise BuildError("Missing column(s): " + ", ".join(missing) + ". Run the query in references/dashboards.md.")
         scope = scope or load_scope()
         rollups = {str(k) for k in scope["rollup_keys"]}
-        cap_keys = {str(k): v for k, v in (scope.get("capitalisation_keys") or {}).items()}
-        adj_types = {_s(k).lower(): v for k, v in (scope.get("adjustment_types") or {}).items()}
+        adj_type = _s(scope.get("adjustment_account_type")).lower()
         if "FINANCIAL_STATEMENT" in rows[0]:
             rows = [r for r in rows if str(r.get("FINANCIAL_STATEMENT") or "P&L").strip().upper() in ("P&L", "PL", "P AND L", "INCOME STATEMENT")]
         rows = [r for r in rows if _s(r["CHART_OF_ACCOUNT_KEY"]) not in rollups]
@@ -153,20 +142,13 @@ class Frame:
                     q[k] = None if v is None else v * m
                 signed.append(q)
             rows = signed
-        def adj_class(r):
-            t = _s(r.get("ADJUSTMENT_TYPE"))
-            if not t or t.lower() in ("none", "null"):
-                return None
-            if t.lower() not in adj_types:
-                raise BuildError(f"Unknown ADJUSTMENT_TYPE '{t}' (account {_s(r['ACCOUNT_NAME']) or _s(r['CHART_OF_ACCOUNT_KEY'])}). "
-                                 "Probe it (references/dashboards.md §2) and add it to config/scope.json adjustment_types; never drop the rows.")
-            return adj_types[t.lower()]
-        is_adj = lambda r: _s(r["CHART_OF_ACCOUNT_KEY"]) in cap_keys
+        is_adj = lambda r: bool(adj_type) and _s(r.get("ACCOUNT_TYPE")).lower() == adj_type
         unknown = sorted({(_s(r["CHART_OF_ACCOUNT_KEY"]), _s(r["ACCOUNT_NAME"])) for r in rows
                           if _s(r["CHART_OF_ACCOUNT_KEY"]).startswith("-") and not is_adj(r)})
         if unknown:
-            raise BuildError("Negative key(s) that are neither a listed roll-up nor a capitalisation key (config/scope.json "
-                             "capitalisation_keys): " + ", ".join(f"{k} ({n or 'no name'})" for k, n in unknown)
+            raise BuildError("Negative key(s) that are neither a listed roll-up nor an adjustment account (ACCOUNT_TYPE "
+                             + (repr(scope.get("adjustment_account_type")) if adj_type else "not configured") + "): "
+                             + ", ".join(f"{k} ({n or 'no name'})" for k, n in unknown)
                              + ". Probe them (references/dashboards.md §2) and add roll-ups to config/scope.json rollup_keys.")
         if not rows:
             raise BuildError("Only roll-up rows came back; query the accounts.")
@@ -267,7 +249,7 @@ class Frame:
         for a in self.accounts:
             a["subsidiaries"], a["keys"] = sorted(a["subsidiaries"]), sorted(a["keys"])
         self.cells, self.dcells = {}, {}
-        adj_raw = {}                                          # adjustment type -> period -> {rev, ebitda, ni, components}
+        self.adjustments = {}                                 # adjustment account -> months carrying actuals
         for r in rows:
             p, s, a = pidx[to_date(r["PERIOD_START_DATE"]).replace(day=1)], sidx[sub_of(r)], aidx[unit_of[id(r)]]
             vals = [to_num(r["TOTAL_MTD"]), to_num(r["TOTAL_PY_MTD"]), to_num(r["TOTAL_BUDGET_MTD"])]
@@ -275,18 +257,8 @@ class Frame:
             self.cells[key] = [add(o, v) for o, v in zip(self.cells[key], vals)] if key in self.cells else vals
             dk = (p, a, s, _s(r.get("CLASS_NAME")) or NO_CLASS, _s(r.get("DEPARTMENT_NAME")) or NO_DEPT)
             self.dcells[dk] = [add(o, v) for o, v in zip(self.dcells[dk], vals)] if dk in self.dcells else vals
-            t = _s(r.get("ADJUSTMENT_TYPE"))
-            cls = adj_class(r)
-            if cls and vals[0] not in (None, 0):
-                v = vals[0]
-                cell = adj_raw.setdefault(t, {"class": cls, "by_period": {}})["by_period"].setdefault(p, {"rev": 0.0, "ebitda": 0.0, "ni": 0.0, "components": {}})
-                cell["ni"] += v
-                if _s(r.get("COA_MAPPING_L2")).lower() == "adjusted ebitda":
-                    cell["ebitda"] += v
-                if _s(r.get("COA_MAPPING_L3")).lower() == "revenue":
-                    cell["rev"] += v
-                comp = cap_keys.get(_s(r["CHART_OF_ACCOUNT_KEY"])) or (_s(r.get("COA_MAPPING_L4")) or "Other")
-                cell["components"][comp] = cell["components"].get(comp, 0.0) + v
+            if self.accounts[a]["adjustment"] and vals[0] not in (None, 0):
+                self.adjustments.setdefault(self.accounts[a]["name"], set()).add(p)
 
         # as-of: the latest closed month, unless declared. An open month (early accrual reversals,
         # FX revaluation, a $0.01 rounding line) carries a few actuals; it is closed only when at
@@ -320,11 +292,4 @@ class Frame:
                                  "year": m["year"], "quarter": m["quarter"], "month": d.month, "name": m["name"],
                                  "future": i > self.as_of})
         self.aidx, self.sidx, self.pidx = aidx, sidx, pidx
-        # adjustments: per type, the monthly actual impact up to the as-of month (profit-oriented: + raises profit)
-        self.adjustments = {}
-        for t, d in sorted(adj_raw.items()):
-            months = [{"period": self.periods[p]["label"], "idx": p, **{k: round(v, 2) for k, v in c.items() if k != "components"},
-                       "components": {k: round(v, 2) for k, v in sorted(c["components"].items())}}
-                      for p, c in sorted(d["by_period"].items()) if p <= self.as_of]
-            if months:
-                self.adjustments[t] = {"class": d["class"], "months": months}
+        self.adjustments = {n: [self.periods[p]["label"] for p in sorted(ps) if p <= self.as_of] for n, ps in sorted(self.adjustments.items())}

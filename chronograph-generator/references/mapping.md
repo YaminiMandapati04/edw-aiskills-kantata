@@ -27,49 +27,58 @@
 
 ## 2. Row sources by section
 
-A row's line name is looked up (case- and punctuation-insensitive) at the deepest level that has it, unless the map pins a `level` (an L-number). A list of names takes every matching line. Each group's Other row is the group total less the rows named (`remainder_of`, at `remainder_level`), so the group's SUM reproduces the view's total whatever the view adds.
+| Section | Source | How a row is read |
+|---|---|---|
+A row's line name is looked up at the deepest level that has it, unless the map pins a `level` (an L-number). A list of names takes every matching line. Each group's Other row is the group total less the rows named (`remainder_of`, at `remainder_level`), so the group's SUM reproduces the view's total whatever the view adds.
 
 | Section | Source | How a row is read |
 |---|---|---|
-| Profit & Loss | `pl` | Yes Energy's NetSuite hierarchy. L4: Recurring / Non-Recurring Revenue, Recurring / Non-Recurring COGs, Fully loaded S&M Expense, Fully loaded R&D, Total G&A, Depreciation & Amortization, Interest Income, Interest Expense, Reversal of Capitalized Portions, Income Taxes, Other Non-Operating Income & Expense. L5: SaaS - Subscription, Perpetual License, One-time Services (Other Non Recurring Revenue falls in Other non-recurring); Capitalized Commissions, Capitalized Software; HR / IT / Finance / Legal Department, Rent/Lease Expense (Other G&A Spend is the remainder of Total G&A); Transition & Integration Costs, Transaction Costs, Management & AKKR / ACG Fees (Other Items is the remainder). L6: Sales / Marketing / Engineering / Product Expense. The `pl` query keeps L6 only under S&M Expense and R&D and sums the rest to L5 (`config/scope.json` `pl_l6_kept_under_l5`). The COGS L5s (SysOps, Core Operational/Analytics, Customer Support, Data Ops, Live Power Operations, Professional Services) sum into Recurring / Non-Recurring COGs. The memo rows Hosting/Cloud Costs (COGs) and (R&D) read the `hosting` query: the accounts in `scope.json` `hosting_accounts`, split on COA L3 = Cost of Sales (COGs) or not (R&D, including the 61200 Transition & Integration row under Non-Operating), written positive as costs. |
-| Balance Sheet | `bs` | L3: Cash & Equivalents (the individual bank accounts summed), Accounts Receivable, Other Current Assets, Net Fixed Assets, Goodwill & Intangibles. L4: Accounts Payable, Accrued Expenses, Deferred Revenue, Senior Debt. Other Non-Current Assets at L3 includes Capitalized Software Development: the COA mapping has no separate capitalised-software line, so Net Capitalized Software is blank. L2: Equity (Total Equity: shareholder's equity, retained earnings, cumulative translation adjustment and current-year net income, keys -20001 / -20002 / -20003). Other Current Liabilities and Other Long-Term Liabilities (Non-Current Liabilities less Senior Debt) are remainders of their L3. |
-| Cash Flow Statement | `cf` | Every row carries a cash-flow label. Net Income = Cash from Operations > Income from Operations > Net Income. Total Non-Cash Items = Income from Operations less Net Income. Change in Working Capital, Capital Expenditures, Change in Equity and Change in Debt = their L2 lines. FX Change = Effect of Exchange Rate on Cash. Other cash from investing (Contingent Purchase Consideration, Other Asset) and the financing Other Items (Other Long Term Liabilities) are remainders. Beginning Cash: the first month from the view, later months the template's link to the prior month's Ending Cash. `cf_unlabelled` is empty: an unlabelled row with activity is refused until the owner maps it. |
-| ARR Bridge | `arr` | ARR_WATERFALL categories: Beginning ARR, New, Churn, Upsell, Downsell, **FX**, Ending ARR, Gross / Net Dollar Retention. Churn fills (-) Churn/Lost, Downsell fills (-) Downsell/Contraction (Subscription), and **FX fills (-) Downsell/Contraction (Transactional) as -1 × FX**. The template has no FX row; it subtracts the Transactional row inside Net Dollar Retention, so the bridge foots to the view's Ending ARR. MTD values, USD as the view stores it. Beginning ARR: first month from the view, later months linked to the prior Ending ARR. GDR, NDR and Ending ARR are the template's formulas and tie to the view (NDR to the view's NDR + FX, §5). The retention % rows are derived (§4). |
-| Customer Bridge | `customers` | Beginning, New and Lost Customers from the bridge, month-to-date; Lost is entered positive (§3). Ending Customers is the template's formula (Beginning less Lost plus New). |
-| Bookings | `bookings` | Bookings - ARR (New) = `ARR_NEW_MTD`, Bookings - ARR (Upsell) = `ARR_UPSELL_MTD` (together they are `RECURRING_BOOKINGS_MTD`). Bookings - Recurring Services is blank: the view has no separate recurring-services booking. Non-Recurring from `NON_RECURRING_BOOKINGS_MTD`. Recurring and Total are the template's SUMs and tie to the view. |
-| Pipeline | `pipeline` | Unweighted = `OPEN_PIPELINE_VALUE_MTD`, Weighted = `WEIGHTED_PIPELINE_VALUE_MTD`, as at each month-end (Weighted is left blank only if the view returns 0 in every month). Snapshot history starts January 2024. No coverage ratio: the view has no pipeline target. |
-| Headcount, Liquidity, Payments Metrics | none | Blank (§4). The template's formulas in these sections stay. |
+| Profit & Loss | `pl` | Kantata's hierarchy: L4 Recurring / Non-Recurring Revenue, Recurring / Non-Recurring COGs, Fully Loaded S&M Expense, Fully Loaded R&D, G&A, and the non-operating L4s; L5 SaaS - Subscription, One-time Services, HR / IT / Finance / Legal Department, Severance, Other Items; L6 Sales / Marketing / Engineering / Product Expense. The `pl` query keeps L6 only under S&M Expense and R&D and sums the rest to L5 (`config/scope.json` `pl_l6_kept_under_l5`): Kantata's L6 is account-level detail, and the full grain (about 5,800 rows for 24 months) is cut off by the connector. Other S&M (Training), Other R&D and Other G&A Spend are remainders of their L4. Depreciation & Amortization = the D&A L4 plus the two goodwill amortisation L4s (Kimble, Mavenlink). The memo row Hosting/Cloud Costs (COGs) reads the Webhosting L5 lines under both COGS groups. |
+| Balance Sheet | `bs` | L3 Cash & Cash Equivalents, Accounts Receivable, Other Current Assets, Goodwill & Intangibles; L4 Tangible fixed assets (Net Fixed Assets), Accounts Payable + "Acounts Payable" (the chart of accounts carries both spellings), Deferred Revenue, Senior Debt; L2 Equity (Total Equity, including the group-level keys -20001 / -20002 / -20003). Other Non-Current Assets, Other Current Liabilities and Other Long-Term Liabilities are remainders of their L3. |
+| Cash Flow Statement | `cf`, `cf_label` | **Strictly by the view's cash-flow mapping**, consolidated over all subsidiaries: every row reads only rows the view labels (CASH_FLOW_L1..L3); nothing is assumed or placed by rule. Net Income = the L3 Net Income line; Total Non-Cash Items = L3 lines labelled Total Non-Cash Items (none today, so blank); Change in Working Capital, Capital Expenditures, Change in equity, Change in debt = their L2 lines; FX Change = the L1 FX Change label; Other cash from investing and the financing Other Items are the remainders of their L1 totals (0 today). Cash Before Financing, Net Cash Flow, Beginning Cash and Ending Cash read the view's own labels every month (no formulas, no link to the prior month). Rows the view carries **without a cash-flow label** (today the group-level Amortization adjustment, key -10000, (4.53)mn a month) are placed in no line and reported; the view's Net Cash Flow and Ending Cash include them. A dashboard filtered to one subsidiary (for example Mavenlink, Inc.) shows that subsidiary only and will not match. |
+| ARR Bridge | `arr` | Kantata's categories: Beginning ARR, New, Churn, Upsell, Downsell, Ending ARR, Gross / Net Dollar Retention. Churn fills (-) Churn/Lost, Downsell fills (-) Downsell/Contraction (Subscription); both are negative in the view and entered positive in the sheet (§3). MTD values, USD as the view stores it (the view has no actual-rate or constant-currency variant). Beginning ARR: first month from the view, later months linked to the prior Ending ARR. Gross Dollar Retention (Beginning less churn and downsell), Net Dollar Retention and Ending ARR are the template's formulas and tie to the view. The retention % rows are derived (§4). |
+| Customer Bridge | `customers` | Beginning, New and Lost Customers from the bridge as **LTM** counts (`CUSTOMER_BRIDGE.TOTAL_LTM`): each category is measured against the customer count 12 months back, so Beginning Customers is that count and does not equal the prior month's Ending (cell note on every row). Lost is entered positive (§3). Ending Customers is the template's formula (Beginning less Lost plus New); the LTM bridge foots and its Ending equals the month-end count. |
+| Bookings | `bookings` | GTM does not split recurring bookings into New and Upsell (`ARR_NEW_MTD` / `ARR_UPSELL_MTD` are always 0), so all recurring bookings (`RECURRING_BOOKINGS_MTD`, won New Sales and Seat Expansion) sit in Bookings - Recurring Services, with a cell note. Non-Recurring from `NON_RECURRING_BOOKINGS_MTD`. Recurring and Total are the template's SUMs and tie to the view. |
+| Pipeline | `pipeline` | Unweighted = `OPEN_PIPELINE_VALUE_MTD` (stages 01 - ENGAGE to 06 - NEGOTIATE, ACV > 0, as at each month-end; cell note). Weighted = `WEIGHTED_PIPELINE_VALUE_MTD`, left blank while the view returns 0 in every month (no stage probabilities yet). Months before the view's snapshot history (today it starts February 2025) are blank and reported. No coverage ratio: the view has no pipeline target. |
+| Liquidity | `revolver`, `revolver_drawn`, `cf` | $ Revolver Size = `REVOLVER_AMOUNT` for METRIC Revolver Size from FINANCE_ANALYTICS REVOLVER (Finance's manual table `PROD_DB.MANUAL.REVOLVER`), every month written from the table (no link to the prior month). $ Drawn Revolver: Drawn Revolver is the balance sheet MTD value of account 280360 (`ENDING_BALANCE_CONVERTED`, query `revolver_drawn`; the account sits in Senior Debt). The other revolver accounts (280370, 280903) are 0 today and not included. A stored 0 is written as 0; a missing month is refused, never filled. $ Unused Revolver is the template's formula (Size less Drawn). Principal Payments = `REVOLVER_AMOUNT` for METRIC Principal Payments in the REVOLVER table: blank (reported) while the table has no such rows; once present, every month must be (a part-filled month set is refused). |
+| Headcount, Payments Metrics | none | Blank (§4). The template's formulas in these sections stay. |
 
 ## 3. Sign conventions
 
-The template (the corrected Accel-KKR template, sheet "2025 Template Corrected") enters **costs, outflows and reductions as positive amounts and subtracts them in its formulas**: Gross Profit = Revenue − Cost of Sales, Adjusted EBITDA = Gross Profit − Operating Expenses, Total Non-Operating = Interest Income − D&A − Interest Expense + Reversal of Capitalized Portions − Income Taxes − Other Non-Operating, Cash from Operations = Income from Operations − Change in Working Capital, Cash before Financing = Cash from Operations − Cash from Investing, GDR = Beginning ARR − Churn − Downsell (Subscription), NDR = GDR + Upsell − Downsell (Transactional) + Cross-Sell + Price Increase, Ending Customers = Beginning − Lost + New. The build reads every view in its own sign and writes the rows marked `negate` in the map with the sign reversed. All its calculations and gates use the view's sign, and the gates evaluate the template's formulas, so a wrong flip fails a tie.
+The template (the corrected Accel-KKR template, sheet "2025 Template Corrected") enters **costs, outflows and reductions as positive amounts and subtracts them in its formulas**: Gross Profit = Revenue − Cost of Sales, Adjusted EBITDA = Gross Profit − Operating Expenses, Total Non-Operating = Interest Income − D&A − Interest Expense + Reversal of Capitalized Portions − Income Taxes − Other Non-Operating, Cash from Operations = Income from Operations − Change in Working Capital, Cash before Financing = Cash from Operations − Cash from Investing, GDR = Beginning ARR − Churn − Downsell, Ending Customers = Beginning − Lost + New. The build reads every view in its own sign and writes the rows marked `negate` in the map with the sign reversed; all its calculations (remainders, derived ratios) and gates use the view's sign, and the gates evaluate the template's formulas, so a wrong flip fails the P&L, cash, ARR or customer ties. The rows written positive are listed in the build output (`entered_positive`).
 
-- **P&L**: the view stores values unsigned; each row is multiplied by its account's `P_AND_L_MULTIPLIER` (+1 revenue, -1 costs and the non-operating lines), and a line without one is refused. Revenue is written positive. Cost of sales, every operating expense (including Capitalized Commissions / Software), D&A, Interest Expense, Income Taxes, Transition & Integration, Transaction Costs, Management Fees and Other Items are written positive as costs (a credit shows negative). Interest Income and Reversal of Capitalized Portions are written as signed (income positive), because the template adds them. The governed tie-out of revenue, Adjusted EBITDA and net income proves the signs every month.
-- **Capitalised portions**: Capitalized Commissions / Software (keys -8002 / -8001) sit in Fully loaded opex, and their Reversal (key -8003) adds them back below Adjusted EBITDA. They move Adjusted EBITDA and net to zero in Net Income.
-- **Balance sheet**: as stored. Assets, liabilities and equity are all positive, so `A = L + E` should be 0. In Yes Energy's view it is, so the check is a blocking gate.
-- **Cash flow**: positive for cash in. Net Income, Total Non-Cash Items, FX Change and the financing rows are written as stored. Change in Working Capital, Capital Expenditures and Other cash from investing are written with the sign reversed (a use of cash positive).
-- **ARR and customers**: churn, downsell and lost customers are negative in the views and written positive. FX is written as -1 × FX in the Transactional row: a favourable FX movement shows negative there and adds to NDR.
+- **P&L**: the view stores values unsigned; each row is multiplied by its account's `P_AND_L_MULTIPLIER` (+1 revenue and income, -1 costs), and a line without one is refused. Revenue is written positive; cost of sales, every operating expense, D&A, Interest Expense, Income Taxes, Severance, Other Items and the Hosting memo row are written positive as costs (a credit shows negative). The governed tie-out of revenue, Adjusted EBITDA and net income proves the signs every month.
+- **Watch: Depreciation & Amortization reads as income.** The group-level Amortization adjustment (key -10000) is income in the view (about 4.5mn a month), so D&A shows negative in the sheet and lifts Net Income above Adjusted EBITDA; the cash flow then adds it back again. Governed Net Income includes it, so the sheet ties, but the build lists it under `confirm_at_source` (map `sign_watch`: D&A is expected positive) for the view owner.
+- **Balance sheet**: as stored. Assets, liabilities and equity are all positive, so `A = L + E` (Total Assets less Total L & S/H Equity) should be 0. Kantata's view does not balance (§5).
+- **Cash flow**: the view's sign is positive for cash in. Net Income, Total Non-Cash Items, FX Change, the financing rows and the totals read from the view's labels are written as stored. Change in Working Capital, Capital Expenditures and Other cash from investing are written with the sign reversed (a use of cash positive), because the template subtracts them.
+- **ARR and customers**: churn, downsell and lost customers are negative in the views and written positive.
 
 ## 4. Blanks, derived rows and template corrections
 
 **Blank, never 0** (each listed in the build report with its reason):
-- Headcount (all rows), $ Revolver Size and $ Drawn Revolver, Principal Payments, the Payments Metrics inputs, and Renewal Rate %. No view carries them.
-- P&L and BS lines Yes Energy's chart of accounts does not carry (`src: null`): Maintenance & Support, Recurring Transactional, Recurring Services, Term License, Hardware, the three synergy rows, Severance; Net Capitalized Software, Short Term Debt, Accrued Interest, Subordinate Debt; cash-flow Capitalized R&D and Revolver. If the view gains such a line, the coverage gate refuses until the owner maps it. Rows are mapped only from COA mapping levels or owner-set account lists, never by a similar name.
-- ARR (+) Cross-Sell and (+) Price Increase: the bridge has no such category (they are in Upsell).
-- Bookings - Recurring Services: all recurring bookings are split into ARR New / ARR Upsell.
-- Quarterly Pipeline Coverage Ratio: GTM has no coverage metric.
-- Template formulas over blank inputs (Ending FTEs, $ Unused Revolver, Net Transactional Revenue, the take rates) keep their formulas; until the inputs are filled they show a dash. They are listed at hand-over (`formula_rows_over_blank_inputs`).
+- Headcount (all rows) and the Payments Metrics inputs. No view carries them.
+- P&L, BS and CF lines Kantata's chart of accounts does not carry (`src: null`, reason "not in Kantata's chart of accounts"): Maintenance & Support, Recurring Transactional, Recurring Services, Perpetual License, Term License, Hardware, Capitalized commissions, Capitalized software, Rent/Lease Expense, the three synergy rows, Interest Income, Reversal of Capitalized Portions, Transition & Integration Costs, Transaction Costs, Management & AKKR / ACG Fees, Hosting/Cloud Costs (R&D); Net Capitalized Software, Accrued Expenses, Short Term Debt, Accrued Interest, Subordinate Debt; cash-flow Capitalized R&D and Revolver (the cash flow carries no revolver line; Liquidity holds size and drawn amount). If the view gains such a line, the coverage gate refuses until the owner maps it.
+- ARR rows Kantata's bridge has no category for: Downsell/Contraction (Transactional), Cross-Sell, Price Increase (all downsell is in the Subscription row; cross-sell and price increases are in Upsell).
+- Bookings - ARR (New) and ARR (Upsell): the view does not split recurring bookings.
+- Quarterly Pipeline Coverage Ratio: GTM has no coverage metric. Weighted Pipeline while the view returns 0 in every month.
+- Template formulas over blank inputs (Ending FTEs, Net Transactional Revenue, the take rates) keep their formulas so they work once the inputs are filled; until then they show a dash. They are listed at hand-over (`formula_rows_over_blank_inputs`).
 
-**Derived (labelled with a cell note)**: three ratios of the ARR view's own LTM amounts, each divided by the opening ARR twelve months back:
+**Derived (labelled with a cell note)**: three ratios of the ARR view's own LTM amounts, LTM basis, each divided by the opening ARR twelve months back:
 - Churn Only Gross Retention % = (opening ARR less LTM churn) / opening ARR.
 - Gross Retention % = LTM Gross Dollar Retention / opening ARR.
-- Net Retention % = LTM Net Dollar Retention / opening ARR (the view's NDR, before FX).
+- Net Retention % = LTM Net Dollar Retention / opening ARR.
 
-**Template corrections** (reported on every build):
+and one ratio of the ARR view's LTM customer counts (`src: customer_rate`):
+- Renewal Rate % = (Beginning Customers LTM less Lost Customers LTM) / Beginning Customers LTM, with Lost as a positive count. In the view's sign (Lost negative) that is (Beginning + Lost) / Beginning. Formatted 0.0% and not divided by 1,000; blank, never 0, where Beginning is missing or 0.
+
+**Template corrections** (reported on every build). The corrected template already fixed its sign formulas (Gross Profit, Adjusted EBITDA, Total Non-Operating, Cash from Operations, Cash before Financing, Net Cash Flow, GDR, NDR, the retention %, Ending Customers, Ending FTEs, Net Transactional Revenue) and made Recurring and Non-recurring Gross Profit formulas in every month. Two errors it still carries are corrected by the build:
 - S&M Expense becomes `=SUM(Sales:Other S&M)` and R&D becomes `=SUM(Engineering:Other R&D)`. The template's SUMs stopped one row short of their own Other row.
-- Ending Cash becomes `=Net Cash Flow + FX Change + Beginning Cash`. The template left out its own FX row.
-- Rows that now read the views instead of the template's links: Bookings ARR (New) and ARR (Upsell) read GTM bookings (the template linked them to the ARR bridge, which measures ARR going live, not signings); cash-flow Net Income reads the cash-flow mart.
-- The ARR Transactional downsell row carries FX, with a cell note.
+- Rows that now read the views instead of the template's links or placeholders:
+  - Bookings ARR (New) and ARR (Upsell) no longer link to the ARR bridge (which measures ARR going live, not signings); they are blank, and all recurring booking ACV from GTM sits in Bookings - Recurring Services.
+  - Cash-flow Net Income now reads the cash-flow mart (§5).
+  - Cash Before Financing, Net Cash Flow, Beginning Cash and Ending Cash read the view's own labels (strict mapping) instead of the template's formulas and prior-month link; the template's Ending Cash also left out its own FX row.
+  - Hosting/Cloud Costs (COGs) now reads the Webhosting lines. The template's `=Recurring COGs × 0.9` was a placeholder.
+- Cell notes state the source on the cash-flow Net Income, Net Cash Flow, Bookings - Recurring Services, Unweighted Pipeline, Accounts Payable, Total Equity, D&A, Downsell, retention %, Renewal Rate %, Customer Bridge (LTM) and revolver rows.
 
 ## 5. Gates
 
@@ -78,29 +87,31 @@ The build evaluates the sheet's own formulas as Excel will, and refuses unless e
 | Row | Must equal |
 |---|---|
 | Total Revenue, Adjusted EBITDA, Net Income | `REVENUE_MTD`, `ADJUSTED_EBITDA_MTD`, `NET_INCOME_MTD` |
-| A = L + E | 0 |
 | Cash & Equivalents | the cash flow's Ending Cash |
-| Cash Before Financing | the cash flow's Cash before Financing |
-| Beginning Cash, Ending Cash | the cash flow's Beginning / Ending Cash |
-| Beginning ARR, Gross Dollar Retention, Ending ARR | the ARR bridge's categories |
-| Net Dollar Retention | the bridge's Net Dollar Retention + FX (the sheet carries FX inside NDR) |
-| Ending Customers | the customer bridge's Ending Customers |
+| Cash Before Financing (view label) | Cash from Operations less Cash from Investing, from the strictly mapped lines |
+| Ending Cash (view label) | Beginning Cash + Net Cash Flow + FX Change |
+| Beginning ARR, Gross Dollar Retention, Net Dollar Retention, Ending ARR | the ARR bridge's categories |
+| Ending Customers | the customer bridge's Ending Customers (LTM; exact) |
+| $ Drawn Revolver (balance sheet account 280360) | not above the REVOLVER table's Revolver Size, every month |
 | Recurring Bookings (ARR), Total Bookings (ARR + SR) | `RECURRING_BOOKINGS_MTD`, `TOTAL_BOOKINGS_MTD` |
 
 Coverage and input gates:
-- Every P&L, balance sheet and cash-flow line with activity must land in a row. Every unlabelled cash-flow row with activity must match a `cf_unlabelled` rule (none today).
+- Every P&L, balance sheet and labelled cash-flow line with activity must land in a row. Cash-flow rows without a label are reported, not placed (`cf_unlabelled` is empty).
 - Every P&L line must carry `P_AND_L_MULTIPLIER`.
 - Every source must cover every month of the window, except pipeline months before the view's snapshot history (blank and reported).
 - The as-of month must have closed: its governed revenue at least half the median of the three months before it, and at least half as many P&L lines posting as in the busiest earlier month. Otherwise the build refuses and names the last closed month (`use_as_of`).
 - No ARR category may carry values without a row to hold it (`arr_categories`).
-- No balance sheet line may sit outside Assets and Total Liabilities & Share Holder Equity.
+- The revolver result must carry Revolver Size for every month of the window (a missing month or an empty amount is refused: "no data for …"), and no other METRIC: one with no row to hold it is refused, including a Drawn Revolver METRIC, because Drawn Revolver comes from the balance sheet. The `revolver_drawn` result must carry account 280360's balance for every month.
+- No balance sheet line may sit outside Assets and Liabilities & Equity.
 
-**Reconciling item (reported, not a gate; it also lands in `confirm_at_source`)**:
-- **Cash-flow Net Income vs P&L Net Income.** They differ in most months of the Yes Energy view (Nov 2024 to Oct 2026: 17 of 24 months, by up to about 0.9mn). The cash flow uses its own Net Income so that cash ties. Quote the months and sizes for the view owner.
+**Reconciling items (reported, not gates; each also lands in `confirm_at_source`)**:
+- **A = L + E.** Kantata's balance sheet does not balance in FINANCE_ANALYTICS: 80k (Oct–Dec 2024), 785k (2025), (1.49mn) (2026), stepping each January (the view's governed L&E and Equity totals return 0). Quote the months and the gap; it is a view-owner item.
+- **Net Cash Flow vs Cash Before Financing + Cash from Financing.** The view's Net Cash Flow includes the rows without a cash-flow label (today the group-level Amortization adjustment, key -10000, (4.53)mn a month); no cash-flow line holds them under strict mapping. The difference equals those rows.
+- **Cash-flow Net Income vs P&L Net Income.** They should agree; the cash flow uses its own Net Income so that cash ties.
 
-**Net Cash Flow is not gated**; the sheet's Ending Cash ties to the view in every month.
+Ending Cash is the view's label and ties to Beginning Cash + Net Cash Flow + FX Change and to balance-sheet cash in every month.
 
-**Confirm at source** (`confirm_at_source`): the reconciling item above, D&A if it ever reads as income (`sign_watch`), weighted pipeline if it is 0 in every month, and pipeline months without a snapshot.
+**Confirm at source** (`confirm_at_source` in the build output): the reconciling items above, the cash-flow rows without a cash-flow label (placed in no line; months and last month's amount), D&A reading as income (`sign_watch`), weighted pipeline at 0, and pipeline months without a snapshot.
 
 ## 6. Refusals and what resolves them
 
@@ -110,16 +121,16 @@ Coverage and input gates:
 | `declares N rows but holds M` | The result was cut off | Re-run and save the whole result |
 | `no data for <months>` | A view has not loaded those months | An earlier `--as-of`, or fewer `--months` |
 | `<month> has not closed in FINANCE_ANALYTICS` | The as-of month carries only early accruals | Rebuild with `--as-of <use_as_of>` (the last closed month the refusal names) |
-| `cash-flow rows without a cash-flow label … no cf_unlabelled rule` | The view added a cash-flow row without a label (the Yes Energy view has none today) | The skill owner adds a `cf_unlabelled` rule (by COA level) and re-runs the self-test |
+| `reconciliation check(s) failed` on Cash Before Financing | The strictly mapped operating and investing lines do not add up to the view's own Cash before Financing | A view-owner question (a labelled line the map does not read, or an inconsistent label); never place a row by assumption |
 | `a P&L line has no P_AND_L_MULTIPLIER` | The sign of an account is unknown | A view-owner question; never guess the sign |
-| `reconciliation check(s) failed` | The sheet would not tie to the views | Report the rows and months. If only P&L totals fail, the view's sign convention or roll-ups changed (a new roll-up key belongs in `rollup_keys`); if A = L + E fails, the balance sheet stopped balancing; if a cash or ARR chain fails from one month on, the view's opening balance moved. Either way it is a data or mapping question for the skill owner. |
+| `reconciliation check(s) failed` | The sheet would not tie to the views | Report the rows and months. If only P&L totals fail, the view's sign convention or roll-ups changed; if a cash or ARR chain fails from one month on, the view's opening balance moved. Either way it is a data or mapping question for the skill owner. |
 | `view lines with activity have no row` | The chart of accounts has a new line | The skill owner adds it to the map (a line name, or a remainder), then re-runs the self-test |
 | `the template and the row map disagree` / `template_sha256` | The template changed | §8 |
 | `workbook failed the open check` | Excel would repair the file, a formula has no stored result, the file is in manual calculation, or Excel's recalculation differs from the stored results | Report it with the check output; the skill owner fixes the cause in `clean_template.py` / `sanitize()` |
 
 ## 7. Why Excel used to repair the file, and how it is prevented
 
-The Accel-KKR template as originally received carried:
+The Accel-KKR template carried:
 - about 55,000 leftover range names, 17,000 of them `#REF!`, some pointing at workbooks `[3]` and `[4]` that are not linked;
 - a link to a SharePoint task-tracker workbook;
 - a workbook view whose `firstSheet` pointed at a second sheet that no longer existed.

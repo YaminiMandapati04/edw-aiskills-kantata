@@ -41,8 +41,7 @@ Always fully qualify: `<DATABASE>.<DB_SCHEMA>.<view>`, for example `PROD_DB.SEMA
 |---|---|
 | Reporting currency | Use the `CONVERTED_*` mart columns (reporting currency; the currency code is not in the export, **verify**). **State the basis in every answer.** |
 | Display scale | $ millions with one decimal for headline figures of $1m or more, $ thousands below that. Negatives in parentheses. |
-| Fiscal calendar | Yes Energy's fiscal year is the **calendar year** (January to December; Q1 Jan–Mar … Q4 Oct–Dec), as the view's custom instructions state. `PERIOD.YEAR` / `QUARTER` carry it (verified 23-Nov-2026: Jan 2026 = YEAR 2026, QUARTER 1); `config/scope.json` `fiscal_year_start_month` is 1. There is no separate year-end adjustment period. |
-| Manual adjustments | `INCOME_STATEMENT.ADJUSTMENT_TYPE`: `Pro Forma Actuals`, `Pro Forma Adjustments`, `Adjustment for Capitalized expenses` (keys `-8001` Capitalised Software, `-8002` Capitalised Commissions, `-8003` Reversal of Capitalised Portions); NULL on ordinary actuals and budget. Included in every governed metric; never exclude them, always state them (`view-finance.md` §3a). |
+| Fiscal calendar | NetSuite fiscal `PERIOD`: Kantata's fiscal year runs **1 February to 31 January**, named by the year it ends in (Feb 2026 to Jan 2027 = FY2027; Q1 Feb–Apr, Q2 May–Jul, Q3 Aug–Oct, Q4 Nov–Jan). `PERIOD.YEAR` / `QUARTER` carry it (Feb 2026 = YEAR 2027, QUARTER 1); `config/scope.json` `fiscal_year_start_month` is 2. |
 | Period label | Quote `PERIOD.PERIOD` exactly as stored. Don't invent "FY26 P10" labels. |
 | Latest closed period | Latest `PERIOD` that actually returns a non-null metric (probe, §9). |
 | Data freshness | Compare the latest period in the data with today's date and **say so when they differ**. Never judge staleness against the clock when the data itself lags. |

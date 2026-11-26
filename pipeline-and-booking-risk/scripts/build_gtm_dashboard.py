@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the pipeline risk readout from governed GTM_ANALYTICS extracts (the live path).
 
-    python build_gtm_dashboard.py --extracts work/gtm-live [--out outputs/yes_energy_pipeline_risk_readout.html]
+    python build_gtm_dashboard.py --extracts work/gtm-live [--out outputs/pipeline_risk_readout.html]
                                   [--as-of YYYY-MM] [--window MTD|QTD|YTD|LTM]
                                   [--scope-label "<product>"] [--source PROD_DB.SEMANTIC_VIEWS.GTM_ANALYTICS]
                                   [--payload-out work/gtm_payload.json] [--expect-as-of YYYY-MM] [--previous auto|none|<page.html>]
@@ -22,7 +22,7 @@ and the page says "This view not AI reviewed".
 Recurring run (references/dashboards.md §7): --expect-as-of refuses to build, and writes no file,
 when the latest closed month in the extracts is not the month the run is for. --previous auto
 (the default) compares with the previous month's page (scripts/gtm/compare.py: the page already at
---out when it is for an earlier month, else outputs/previous/yes_energy_pipeline_risk_readout.html) and adds
+--out when it is for an earlier month, else outputs/previous/pipeline_risk_readout.html) and adds
 "since_last" to the JSON line; the page is unchanged. The file name never carries the month, so a
 scheduled daily run always rewrites the same file.
 """
@@ -43,7 +43,7 @@ from gtm.render import render                           # noqa: E402
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--extracts", required=True, help="folder of governed extracts")
-    ap.add_argument("--out", help="default outputs/yes_energy_pipeline_risk_readout.html under the skill folder")
+    ap.add_argument("--out", help="default outputs/pipeline_risk_readout.html under the skill folder")
     ap.add_argument("--as-of", help="analysis month YYYY-MM (default: the latest month in the booking lines that NetSuite has closed)")
     ap.add_argument("--window", choices=engine.WINDOWS)
     ap.add_argument("--scope-label", help="product the extracts were filtered to, for the page")
@@ -66,7 +66,7 @@ def main():
                              "(or the extracts are stale), so no page was written")
         if a.scope_label:
             p["meta"]["scope"]["filtered_to"] = a.scope_label
-        out = a.out or os.path.join(SKILL, "outputs", "yes_energy_pipeline_risk_readout.html")
+        out = a.out or os.path.join(SKILL, "outputs", "pipeline_risk_readout.html")
         prev_file = (None if a.previous == "none" else
                      compare.find_previous(out, ym) if a.previous == "auto" else a.previous)
         since = ({"available": False, "reason": "comparison turned off (--previous none)", "previous": {"file": None, "as_of": None}}

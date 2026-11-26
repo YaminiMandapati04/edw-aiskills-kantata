@@ -213,10 +213,6 @@ def waterfall_problems(b, tmap=None):
         totals = set(ch.get("totals") or [])
         run = 0.0
         for i, (lab, v) in enumerate(zip(xs, vs)):
-            # FX is reported as Downsell (Translational); no separate FX or adjustment step
-            if re.search(r"\b(fx|foreign exchange|adjust\w*)\b", str(lab), re.I) and "translational" not in str(lab).lower():
-                out.append(f"chart '{ch.get('id')}': bridge step '{lab}' is not allowed; FX goes in "
-                           f"'Downsell (Translational)' and there is no adjustment step.")
             if i == 0 or lab in totals:
                 if i > 0 and abs(v - run) > 1e-6 * max(1.0, abs(run)) + 0.005:
                     out.append(f"chart '{ch.get('id')}': bridge does not add up at '{lab}': bar is {v:,.4g}, "

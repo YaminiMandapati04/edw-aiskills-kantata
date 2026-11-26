@@ -9,11 +9,9 @@ Every figure is invented. Never present these numbers as real.
 
 The data is internally consistent on purpose, so analysis can be checked:
   * stage history ends in each opportunity's current stage;
-  * booking metrics follow the view: recurring lines are Salesforce closed-won opportunity lines,
-    ARR (New) for New Customer and ARR (Upsell) for Upgrade / Renewal / Downgrade; non-recurring
-    lines are NetSuite one-time services revenue by subsidiary (product One Time Services);
-  * open opportunities carry a Salesforce PROBABILITY, so pipeline can be weighted;
-  * quarters and years are fiscal, and the fiscal year is the calendar year (1 January to 31 December).
+  * booking metrics follow the view: recurring lines are Salesforce won New Sales and
+    Seat Expansion opportunities; non-recurring lines are NetSuite revenue by subsidiary;
+  * quarters and years are fiscal (1 February to 31 January).
 """
 import datetime as dt
 import os
@@ -53,41 +51,37 @@ def gtm(rng):
     customers = ["Globex Industries", "Initech", "Umbrella Group", "Wayne Industries", "Stark Systems", "Tyrell Corp",
                  "Hooli", "Pied Piper", "Soylent Foods", "Cyberdyne Systems", "Vandelay Industries", "Oscorp",
                  "Aperture Labs", "Massive Dynamic", "Weyland Corp", "Nakatomi Trading", "Rekall", "Black Mesa"]
-    subs = ["Power Settlements", "ENELYTIX"]
-    prods = [("PowerSignals:User License", 0.35), ("DataSignals Cloud", 0.2), ("QuickSignals:User License", 0.2),
-             ("DataSignals API", 0.15), ("Live Power Electric Grid Monitoring Data:ERCOT", 0.1)]
-    # booking lines as the view holds them: Salesforce recurring lines (BOOKING_METRIC ARR (New) / ARR (Upsell), an opportunity,
+    subs = ["Acme US", "Acme UK"]
+    prods = [("OX", 0.7), ("SX", 0.3)]
+    # booking lines as the view holds them: Salesforce recurring lines (BOOKING_METRIC Recurring Services, an opportunity,
     # account and product, no subsidiary) and NetSuite non-recurring revenue (one line per month and subsidiary on the
     # period end date, no account, product or opportunity)
     lines, order = [], 0
     for i, m in enumerate(MONTHS):
-        qend = 1.3 if m.month in (3, 6, 9, 12) else 1.0               # fiscal quarter-end close pattern (FY = calendar year)
+        qend = 1.3 if m.month in (1, 4, 7, 10) else 1.0               # fiscal quarter-end close pattern (FY starts in February)
         for _ in range(rng.randint(8, 12)):
             order += 1
             p = rng.choices([x[0] for x in prods], [x[1] for x in prods])[0]
             new = rng.random() < 0.42
             acv = rng.uniform(15_000, 110_000) * (1 + 0.012 * i) * qend
-            if not new and m >= dt.date(2026, 1, 1):
-                acv *= 1.12                                              # planted: upsell ARR stepping up in FY2026
+            if not new and m >= dt.date(2026, 2, 1):
+                acv *= 1.12                                              # planted: seat expansion stepping up in FY2027
             c = rng.choice(customers)
             if m == dt.date(2026, 10, 1) and new and rng.random() < 0.5:
                 c = rng.choice(["Globex Industries", "Hooli"])           # planted: October concentration
                 acv *= 3.2
             if rng.random() < 0.03:
                 acv = -acv * 0.5                                         # a credit nets off
-            utype = "Upgrade" if acv >= 0 else "Downgrade"
-            lines.append([dt.date(m.year, m.month, rng.randint(1, 28)), "ARR (New)" if new else "ARR (Upsell)", "Salesforce",
-                          "New Customer" if new else (utype if rng.random() < 0.6 else "Renewal"), p, f"006B{order:06d}", c, None, round(acv, 2)])
+            lines.append([dt.date(m.year, m.month, rng.randint(1, 28)), "Recurring Services", "Salesforce",
+                          "New Sales" if new else "Seat Expansion", p, f"006B{order:06d}", c, None, round(acv, 2)])
         for s in subs:
-            nr = rng.uniform(180_000, 260_000) * (0.75 if m >= dt.date(2026, 1, 1) else 1.0)   # planted: non-recurring shrinking in FY2026
-            lines.append([month_end(m), "Non-Recurring", "NetSuite", None, "One Time Services", None, None, s, round(nr, 2)])
+            nr = rng.uniform(180_000, 260_000) * (0.75 if m >= dt.date(2026, 2, 1) else 1.0)   # planted: non-recurring shrinking in FY2027
+            lines.append([month_end(m), "Non-Recurring", "NetSuite", None, None, None, None, s, round(nr, 2)])
     bl_hdr = ["BOOKING_DATE", "BOOKING_METRIC", "BOOKING_SOURCE", "OPPORTUNITY_TYPE", "PRODUCT", "OPPORTUNITY_ID",
               "ACCOUNT_NAME", "SUBSIDIARY_NAME", "BOOKING_ACV_USD"]
 
-    # the Yes Energy stage mapping (DIM_STAGE_MAPPING.STAGE_ORDER): Stage 0 = 1 ... Invest = 7; Closed Lost = 8, Closed Won = 9.
-    # Proposed Renewal (2) is a renewal track and is not walked by new-business deals here.
-    stages = [("Stage 0", 1), ("Qualify", 3), ("Discover", 4), ("Align", 5), ("Validate", 6), ("Invest", 7)]
-    prob = {"Stage 0": 0, "Qualify": 10, "Discover": 20, "Align": 40, "Validate": 60, "Invest": 80}
+    # the stage mapping: 00 - PROSPECT is not a pipeline stage; 01 to 06 are; 07 closes won or lost
+    stages = [("01 - ENGAGE", 2), ("02 - DISCOVER", 3), ("03 - EVALUATE", 4), ("04 - PROPOSE", 5), ("05 - SECURE", 6), ("06 - NEGOTIATE", 7)]
     owners = ["Ava Chen", "Ben Ortiz", "Cara Singh", "Dev Patel", "Eli Novak"]
     sources = ["Marketing", "Sales", "Expansion/Renewal", "Operations"]
     stuck_group = ["Initech", "Oscorp"]
@@ -119,18 +113,17 @@ def gtm(rng):
             cur = path[-1][0]
         else:
             close = min(path[-1][2], LATEST)
-            cur = ("Closed Won", 9) if status == "Closed Won" else ("Closed Lost", 8)
+            cur = ("07 - CLOSE (WON)", 8) if status == "Closed Won" else ("07 - CLOSE (LOST)", 9)
         prod = rng.choice([x[0] for x in prods])
         owner = rng.choice(owners)
         account = rng.choice(customers)
-        otype = rng.choice(["New Customer", "Upgrade", "Renewal"])
-        if slow and cur[0] in ("Validate", "Invest"):                  # planted: a two-customer group stuck late in the funnel
+        otype = rng.choice(["New Sales", "Seat Expansion"])
+        if slow and cur[0] in ("04 - PROPOSE", "05 - SECURE"):          # planted: a two-customer group stuck late in the funnel
             account = rng2.choice(stuck_group)
         name = f"{account} - {otype}"
-        sqo = created                                                    # pipeline creation date = created date (as in the view)
-        p = prob.get(cur[0], 100 if status == "Closed Won" else 0)
+        sqo = path[2][1] if len(path) > 2 else None                      # pipeline creation: reaching 03 - EVALUATE (the SQO stage)
         opps.append([f"006{n:06d}", name, account, owner, prod, src, otype, status, cur[0], cur[1],
-                     close, created, sqo, acv, p, LATEST, None])
+                     close, created, sqo, acv, LATEST, rng.choice(["NorAm", "EMEA"])])
         # stage runs; the close date at the end of each run; planted: some open deals pushed out 1 to 3 times (30 days each),
         # the pushes falling on the last runs (the last one into the current close date)
         pushes = rng2.choice([1, 2, 3]) if status == "Open" and rng2.random() < 0.3 else 0
@@ -143,7 +136,7 @@ def gtm(rng):
             hist.append([f"006{n:06d}", name, L + 1, cur[0], status, path[-1][2], None, close, 1, owner, acv])
     opp_hdr = ["OPPORTUNITY_ID", "OPPORTUNITY_NAME", "ACCOUNT_NAME", "OWNER_NAME", "PRODUCT", "OPPORTUNITY_SOURCE", "OPPORTUNITY_TYPE",
                "STATUS", "STAGE_NAME", "STAGE_ORDER", "CLOSE_DATE", "CREATED_DATE", "PIPELINE_CREATION_DATE", "ACV_USD",
-               "PROBABILITY", "DATA_REFRESHED_AT", "REGION"]
+               "DATA_REFRESHED_AT", "REGION"]
     hist_hdr = ["OPPORTUNITY_ID", "OPPORTUNITY_NAME", "STAGE_RUN_NO", "STAGE_NAME", "STATUS", "STAGE_START_DATE", "STAGE_END_DATE",
                 "CLOSE_DATE", "IS_CURRENT_STAGE", "OWNER_NAME", "ACV_USD"]
     return [
@@ -156,14 +149,14 @@ def gtm(rng):
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "sample-data")
     os.makedirs(out, exist_ok=True)
-    note = ["SYNTHETIC SAMPLE DATA: every figure is invented, for testing the pipeline-and-booking-risk skill without a warehouse.",
+    note = ["SYNTHETIC SAMPLE DATA: every figure is invented, for testing the semantic-data-analyst-gtm skill without a warehouse.",
             "Structure mirrors the sheets and columns of the GTM_ANALYTICS semantic view; see references/local-mode.md.",
             f"Latest closed month in the sample: {LATEST.isoformat()}. Months: 2024-01 to 2026-10."]
     rng = random.Random(SEED)
     write(os.path.join(out, "gtm_sample.xlsx"), gtm(rng),
-          note + ["Planted for testing: October 2026 new ARR bookings concentrated in two customers; upsell ARR stepping up and non-recurring revenue "
-                 "shrinking in FY2026 (from January 2026); fiscal quarter-end close pattern (March, June, September, December); Operations-sourced deals convert worse; "
-                 "open deals long in their stage; Initech and Oscorp stuck in Validate / Invest; "
+          note + ["Planted for testing: October 2026 new-sales bookings concentrated in two customers; seat expansion stepping up and non-recurring revenue "
+                 "shrinking in FY2027 (from February 2026); fiscal quarter-end close pattern (January, April, July, October); Operations-sourced deals convert worse; "
+                 "open deals long in their stage; Initech and Oscorp stuck in 04 - PROPOSE / 05 - SECURE; "
                  "about 30% of open deals with their close date pushed out 1 to 3 times."])
     return 0
 

@@ -55,7 +55,7 @@ A driver is the unit of explanation: an `L4` group inside a section (Recurring R
 
 ## 4. Lenses
 
-Eight lenses are precomputed at the as-of period: window ∈ {MTD, QTD, YTD, LTM} × comparator ∈ {budget, prior year}. A window is the sum of its months (QTD and YTD follow the fiscal `YEAR` / `QUARTER` columns: Yes Energy's fiscal year is the calendar year, so year to date at September is January to September and the outlook runs to 31 December; without those columns `fiscal_year_start_month` in `config/scope.json` sets them, and QC `fiscal_calendar` states the basis; LTM needs twelve months). Each lens carries its own lines, KPIs, accounts, drivers, per-subsidiary facts, bridge, concentration, patterns, insights, actions, explanations, readout, KPI diagnoses and headline. The primary lens (default MTD vs budget) is the one the dashboard opens on and the diagnosis is written for.
+Eight lenses are precomputed at the as-of period: window ∈ {MTD, QTD, YTD, LTM} × comparator ∈ {budget, prior year}. A window is the sum of its months (QTD and YTD follow the fiscal `YEAR` / `QUARTER` columns: Kantata's year starts 1 February, so year to date at September is February to September and the outlook runs to 31 January; without those columns `fiscal_year_start_month` in `config/scope.json` sets them, and QC `fiscal_calendar` states the basis; LTM needs twelve months). Each lens carries its own lines, KPIs, accounts, drivers, per-subsidiary facts, bridge, concentration, patterns, insights, actions, explanations, readout, KPI diagnoses and headline. The primary lens (default MTD vs budget) is the one the dashboard opens on and the diagnosis is written for.
 
 ## 5. Materiality
 
@@ -165,13 +165,3 @@ Disabled capabilities, shown as such rather than as empty charts: price / volume
 ## 17. The five-second test
 
 From the Summary alone a reader can state: whether Adjusted EBITDA is ahead or behind and by how much; the three largest drivers; whether each is a one-off, persistent or a new level; what the mechanical full year looks like; and what management is being asked to decide. If any of the five needs a drawer, the Summary is wrong, not the reader.
-
-## Manual adjustments
-
-The extract carries `INCOME_STATEMENT.ADJUSTMENT_TYPE`. Adjustment rows stay inside the account totals (the governed tie-out needs them). `frame.adjustments` also records, per type and month, the actual impact on revenue, Adjusted EBITDA and net income, with components (the capitalisation keys by name, pro forma by L4). Every lens has `adjustments` with these fields:
-- `types[]`: id, label, class `pro_forma` | `capitalisation`, `actual` {rev, ebitda, ni, months, components[]}, the prior-year `comparator` and `ebitda_variance` on the prior-year basis.
-- `total_ebitda_impact` and `ebitda_excluding_adjustments`.
-- `basis_note` and `rule`.
-
-QC `adjustments_included` names each type and its months. It warns when capitalisation and its reversal do not net to zero at net income within $1 in a month. `finance_brief.py PAYLOAD adjustments --lens <id>` and the `adjustments` block of `brief` / `summary_pack` give the figures with their source paths. Capitalisation is a treatment, not performance: a driver moved by `-8001` / `-8002` is read as "capitalisation charged inside Adjusted EBITDA, reversed below it", never as a saving or overspend.
-
